@@ -12,7 +12,19 @@ public class MyBot : IChessBot
     //    public List<MoveNode> nextMoves;
     //}
 
+    //                      None    Pawn    Knight  Bishop  Rook    Queen   King
+    int[] pieceValues = { 0, 100, 300, 300, 500, 900, 10000 };
 
+    float BasicEvaluation(Board board)
+    {
+        float evaluation = 0;
+        PieceList[] pieceLists = board.GetAllPieceLists();
+        for (int i = 0; i < 6; i++)
+        {
+            evaluation += pieceLists[i].Count * pieceValues[i + 1] - pieceLists[i + 6].Count * pieceValues[i + 1];
+        }
+        return evaluation;
+    }
 
     public Move Think(Board board, Timer timer)
     {
