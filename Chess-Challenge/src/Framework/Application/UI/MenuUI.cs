@@ -78,12 +78,18 @@ namespace ChessChallenge.Application
             }
 
             // My buttons
-
+            // Cosmos
             buttonPos = UIHelper.Scale(new Vector2(405, 210)); 
             buttonSize = UIHelper.Scale(new Vector2(200, 55)); 
-            if (NextButtonInRow("MB vs CV0", ref buttonPos, spacing, buttonSize)) 
+            if (NextButtonInRow("CosmosV0", ref buttonPos, spacing, buttonSize)) 
             { 
                 controller.StartNewBotMatch(ChallengeController.PlayerType.MyBot, ChallengeController.PlayerType.CosmosV0); 
+            }
+
+            // Stockfish
+            if (NextButtonInRow("SF1000", ref buttonPos, spacing, buttonSize))
+            {
+                controller.StartNewBotMatch(ChallengeController.PlayerType.MyBot, ChallengeController.PlayerType.Stockfish1000);
             }
         }
     }
