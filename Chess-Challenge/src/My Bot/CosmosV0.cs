@@ -66,7 +66,7 @@ public class CosmosV0 : IChessBot
         }
 
         Move[] moves = _board.GetLegalMoves(isQSearch);
-        moves = moves.OrderBy(m =>
+        moves = moves.OrderByDescending(m =>
         {
             return m.IsCapture ? 1000 * (int)m.CapturePieceType - (int)m.MovePieceType : 0;
         }).ToArray();
