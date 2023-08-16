@@ -118,9 +118,9 @@ public class MyBot : IChessBot
 
         Move[] moves = _board.GetLegalMoves(isQSearch && !isInCheck);
         moves = moves.OrderByDescending(m =>
-        {
-            return m.IsCapture ? 1000 * (int)m.CapturePieceType - (int)m.MovePieceType : 0;
-        }).ToArray();
+            TTMatch.move == m ? 100_000 :        
+            m.IsCapture ? 1000 * (int)m.CapturePieceType - (int)m.MovePieceType : 0
+        ).ToArray();
 
         int startAlpha = alpha;
         for (int i = 0; i < moves.Length; i++)
