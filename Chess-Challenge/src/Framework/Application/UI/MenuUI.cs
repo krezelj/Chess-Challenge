@@ -96,6 +96,11 @@ namespace ChessChallenge.Application
                 controller.StartNewBotMatch(ChallengeController.PlayerType.MyBot, ChallengeController.PlayerType.CosmosV0_3);
             }
 
+            if (NextButtonInRow("CosmosV0_4", ref buttonPos, spacing, buttonSize))
+            {
+                controller.StartNewBotMatch(ChallengeController.PlayerType.MyBot, ChallengeController.PlayerType.CosmosV0_4);
+            }
+
             // Stockfish
             if (NextButtonInRow("SF1000", ref buttonPos, spacing, buttonSize))
             {
