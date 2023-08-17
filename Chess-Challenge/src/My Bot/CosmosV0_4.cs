@@ -36,7 +36,7 @@ public class CosmosV0_4 : IChessBot
 
     private Move _bestMove;
     private int _searchDepth;
-    private int _timeLimit = 300;
+    private int _timeLimit = 100;
 
     public CosmosV0_4()
     {
