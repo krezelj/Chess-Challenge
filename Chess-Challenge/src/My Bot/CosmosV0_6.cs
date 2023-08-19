@@ -2,7 +2,7 @@
 using System;
 using System.Linq;
 
-public class MyBot : IChessBot
+public class CosmosV0_6 : IChessBot
 {
     #region DEBUG_VARIABLES
 
@@ -27,7 +27,7 @@ public class MyBot : IChessBot
     );
 
     private ulong TTMask = 0x3FFFFF;
-    private TTEntry[] TTArray;    
+    private TTEntry[] TTArray;
 
 
     private Board _board;
@@ -37,7 +37,7 @@ public class MyBot : IChessBot
     private int _searchDepth;
     private int _timeLimit = 100;
 
-    public MyBot()
+    public CosmosV0_6()
     {
         TTArray = new TTEntry[TTMask + 1];
         UnpackedPestoTables = PackedPestoTables.Select(packedTable =>
@@ -62,7 +62,7 @@ public class MyBot : IChessBot
         Move lastBestMove = _bestMove;
         int eval = 0; //#DEBUG
         int lastEval = 0;//#DEBUG
-        while(true)
+        while (true)
         {
             eval = Search(++_searchDepth, 0, -CHECKMATE, CHECKMATE);
             if (timer.MillisecondsElapsedThisTurn > _timeLimit)
@@ -77,7 +77,7 @@ public class MyBot : IChessBot
             _searchDepth - 1,
             lastBestMove,
             lastEval,
-            exploredNodes, exploredNodes/(_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1));//#DEBUG
+            exploredNodes, exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1));//#DEBUG
         return lastBestMove;
     }
 
@@ -90,7 +90,7 @@ public class MyBot : IChessBot
         bool isInCheck = _board.IsInCheck();
         int bestEvaluation = -2 * CHECKMATE;
         Move currentBestMove = Move.NullMove;
-        
+
         if (!isRoot && _board.IsRepeatedPosition())
             return 0;
 
@@ -119,7 +119,7 @@ public class MyBot : IChessBot
 
         Move[] moves = _board.GetLegalMoves(isQSearch && !isInCheck);
         moves = moves.OrderByDescending(m =>
-            TTMatch.move == m ? 100_000 :        
+            TTMatch.move == m ? 100_000 :
             m.IsCapture ? 1000 * (int)m.CapturePieceType - (int)m.MovePieceType : 0
         ).ToArray();
 
@@ -147,8 +147,8 @@ public class MyBot : IChessBot
                 currentBestMove = move;
                 if (isRoot)
                     _bestMove = move;
-                    
-                    
+
+
                 alpha = Math.Max(alpha, evaluation);
                 if (alpha >= beta)
                     break;
@@ -158,7 +158,7 @@ public class MyBot : IChessBot
                 return 2 * CHECKMATE;
         }
 
-        if (!isQSearch&& moves.Length == 0) return isInCheck ? -CHECKMATE + plyCount : 0;
+        if (!isQSearch && moves.Length == 0) return isInCheck ? -CHECKMATE + plyCount : 0;
 
         TTArray[zKey & TTMask] = new TTEntry(zKey, currentBestMove, bestEvaluation, depth,
             bestEvaluation >= beta ? 2 : bestEvaluation <= startAlpha ? 0 : 1);

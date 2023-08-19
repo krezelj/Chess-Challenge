@@ -65,11 +65,11 @@ public class CosmosV0_5 : IChessBot
             if (eval > CHECKMATE / 2 && eval < 2 * CHECKMATE)
                 break;
         }
-        Console.WriteLine("Stats:\n\tDepth Reached: {0}\n\tBest Move: {1}\n\tEvaluation: {2}\n\tNodes: {3}({4}kN/s)",
-            _searchDepth - 1,
-            lastBestMove,
-            lastEval,
-            exploredNodes, exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1));//#DEBUG
+        //Console.WriteLine("Stats:\n\tDepth Reached: {0}\n\tBest Move: {1}\n\tEvaluation: {2}\n\tNodes: {3}({4}kN/s)",
+        //    _searchDepth - 1,
+        //    lastBestMove,
+        //    lastEval,
+        //    exploredNodes, exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1));//#DEBUG
         return lastBestMove;
     }
 
