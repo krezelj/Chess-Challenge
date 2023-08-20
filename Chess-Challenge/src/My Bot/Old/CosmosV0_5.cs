@@ -7,7 +7,7 @@ public class CosmosV0_5 : IChessBot
     #region DEBUG_VARIABLES
 
     private int exploredNodes;//#DEBUG;
-    private int ttHits;
+    // private int ttHits;
 
     #endregion
 
@@ -49,7 +49,7 @@ public class CosmosV0_5 : IChessBot
         _searchDepth = 1;
 
         exploredNodes = 0;//#DEBUG
-        ttHits = 0;//#DEBUG
+        // ttHits = 0;//#DEBUG
 
         Move lastBestMove = _bestMove;
         int eval = 0; //#DEBUG

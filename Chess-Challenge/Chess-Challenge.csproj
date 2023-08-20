@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Update="src\My Bot\CosmosV0_2.cs">
+    <Compile Update="src\My Bot\Old\CosmosV0_2.cs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Compile>
     <Compile Update="src\My Bot\MyBot.cs">

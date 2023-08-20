@@ -5,7 +5,7 @@ using System;
 using System.Linq;
 using System.Reflection.Metadata;
 
-public class MyBot : IChessBot
+public class Cosmos : IChessBot
 {
 #if DEBUG
 
@@ -35,7 +35,7 @@ public class MyBot : IChessBot
 
     private Move _bestMove;
 
-    public MyBot()
+    public Cosmos()
     {
         TTArray = new TTEntry[0x400000];
         UnpackedPestoTables = PackedPestoTables.Select(packedTable =>
@@ -74,7 +74,7 @@ public class MyBot : IChessBot
             Console.WriteLine("Stats:\tDepth: {0,-2}\tEvaluation: {1,-5}\tNodes: {2, -9}({3, -5}kN/s)\tBest Move: {4}{5}",
                 searchDepth,
                 printoutEval,
-                exploredNodes, 
+                exploredNodes,
                 exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1),
                 _bestMove.StartSquare.Name, _bestMove.TargetSquare.Name);
 #endif

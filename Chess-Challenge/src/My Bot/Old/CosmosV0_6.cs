@@ -7,7 +7,7 @@ public class CosmosV0_6 : IChessBot
     #region DEBUG_VARIABLES
 
     private int exploredNodes;//#DEBUG;
-    private int ttHits;
+    // private int ttHits;
 
     #endregion
 
@@ -35,7 +35,7 @@ public class CosmosV0_6 : IChessBot
 
     private Move _bestMove;
     private int _searchDepth;
-    private int _timeLimit = 100;
+    private int _timeLimit = 600;
 
     public CosmosV0_6()
     {
@@ -57,7 +57,7 @@ public class CosmosV0_6 : IChessBot
         _timer = timer;
         _searchDepth = 1;
         exploredNodes = 0;//#DEBUG
-        ttHits = 0;//#DEBUG
+        // ttHits = 0;//#DEBUG
 
         Move lastBestMove = _bestMove;
         int eval = 0; //#DEBUG
@@ -73,11 +73,11 @@ public class CosmosV0_6 : IChessBot
             if (eval > CHECKMATE / 2)
                 break;
         }
-        Console.WriteLine("Stats:\n\tDepth Reached: {0}\n\tBest Move: {1}\n\tEvaluation: {2}\n\tNodes: {3}({4}kN/s)",
-            _searchDepth - 1,
-            lastBestMove,
-            lastEval,
-            exploredNodes, exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1));//#DEBUG
+        //Console.WriteLine("Stats:\n\tDepth Reached: {0}\n\tBest Move: {1}\n\tEvaluation: {2}\n\tNodes: {3}({4}kN/s)",
+        //    _searchDepth - 1,
+        //    lastBestMove,
+        //    lastEval,
+        //    exploredNodes, exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1));//#DEBUG
         return lastBestMove;
     }
 
