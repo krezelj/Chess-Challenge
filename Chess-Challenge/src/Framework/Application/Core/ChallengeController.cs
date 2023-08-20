@@ -19,6 +19,7 @@ namespace ChessChallenge.Application
         {
             Human,
             MyBot,
+            Cosmos,
             EvilBot,
             CosmosV0,
             CosmosV0_2,
@@ -27,7 +28,8 @@ namespace ChessChallenge.Application
             CosmosV0_5,
             CosmosV0_6,
             Stockfish1000,
-            Stockfish1500
+            Stockfish1500,
+            Stockfish2000
                
         }
 
@@ -219,6 +221,7 @@ namespace ChessChallenge.Application
             {
                 PlayerType.MyBot => new ChessPlayer(new MyBot(), type, GameDurationMilliseconds),
                 PlayerType.EvilBot => new ChessPlayer(new EvilBot(), type, GameDurationMilliseconds),
+                PlayerType.Cosmos => new ChessPlayer(new Cosmos(), type, GameDurationMilliseconds),
                 PlayerType.CosmosV0 => new ChessPlayer(new CosmosV0(), type, GameDurationMilliseconds),
                 PlayerType.CosmosV0_2 => new ChessPlayer(new CosmosV0_2(), type, GameDurationMilliseconds),
                 PlayerType.CosmosV0_3 => new ChessPlayer(new CosmosV0_3(), type, GameDurationMilliseconds),
@@ -227,7 +230,28 @@ namespace ChessChallenge.Application
                 PlayerType.CosmosV0_6 => new ChessPlayer(new CosmosV0_5(), type, GameDurationMilliseconds),
                 PlayerType.Stockfish1000 => new ChessPlayer(new Stockfish1000(), type, GameDurationMilliseconds),
                 PlayerType.Stockfish1500 => new ChessPlayer(new Stockfish1500(), type, GameDurationMilliseconds),
+                PlayerType.Stockfish2000 => new ChessPlayer(new Stockfish2000(), type, GameDurationMilliseconds),
                 _ => new ChessPlayer(new HumanPlayer(boardUI), type)
+            };
+        }
+
+        public static ChessChallenge.API.IChessBot? CreateBot(PlayerType type)
+        {
+            return type switch
+            {
+                PlayerType.MyBot => new MyBot(),
+                PlayerType.EvilBot => new EvilBot(),
+                PlayerType.Cosmos => new Cosmos(),
+                PlayerType.CosmosV0 => new CosmosV0(),
+                PlayerType.CosmosV0_2 => new CosmosV0_2(),
+                PlayerType.CosmosV0_3 => new CosmosV0_3(),
+                PlayerType.CosmosV0_4 => new CosmosV0_4(),
+                PlayerType.CosmosV0_5 => new CosmosV0_5(),
+                PlayerType.CosmosV0_6 => new CosmosV0_5(),
+                PlayerType.Stockfish1000 => new Stockfish1000(),
+                PlayerType.Stockfish1500 => new Stockfish1500(),
+                PlayerType.Stockfish2000 => new Stockfish2000(),
+                _ => null
             };
         }
 
