@@ -30,6 +30,7 @@ public class Cosmos : IChessBot
     private int _timeLimit;
 
     private Move _bestMove;
+    private Move[] _killerMoves;
 
     public Cosmos()
     {
@@ -49,14 +50,18 @@ public class Cosmos : IChessBot
     {
         _board = board;
         _timer = timer;
+        _killerMoves = new Move[512];
 #if DEBUG
         exploredNodes = 0;
         Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
 #endif
-
+#if INF
+        _timeLimit = 1_000_000_000;
+#else
         _timeLimit = timer.MillisecondsRemaining / 30;
+#endif
 
-        for (int searchDepth = 1; ;)
+        for (int searchDepth = 0; ;)
         {
             int eval = Search(++searchDepth, 0, -CHECKMATE, CHECKMATE);
             if (3 * timer.MillisecondsElapsedThisTurn > _timeLimit)
@@ -67,24 +72,25 @@ public class Cosmos : IChessBot
             {
                 printoutEval = $"{(eval < 0 ? "-" : "")}M{Math.Ceiling((CHECKMATE - Math.Abs((double)eval)) / 2)}";
             }
-            Console.WriteLine("Stats:\tDepth: {0,-2}\tEvaluation: {1,-5}\tNodes: {2, -9}({3, -5}kN/s)\tBest Move: {4}{5}",
+            Console.WriteLine("Stats:\tDepth: {0,-2}\tEvaluation: {1,-5}\tNodes: {2, -9}\tTime: {3,-5}ms\t({4, -5}kN/s)\tBest Move: {5}{6}",
                 searchDepth,
                 printoutEval,
-                exploredNodes, 
+                exploredNodes,
+                _timer.MillisecondsElapsedThisTurn,
                 exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1),
                 _bestMove.StartSquare.Name, _bestMove.TargetSquare.Name);
 #endif
         }
     }
 
-    int Search(int depth, int plyCount, int alpha, int beta)
+    int Search(int depth, int plyFromRoot, int alpha, int beta)
     {
 #if DEBUG
         ++exploredNodes;
 #endif
 
         bool isQSearch = depth <= 0;
-        bool isRoot = plyCount == 0;
+        bool isRoot = plyFromRoot == 0;
         bool isInCheck = _board.IsInCheck();
         bool canFutilityPrune = false;
 
@@ -135,8 +141,10 @@ public class Cosmos : IChessBot
 
         Move[] moves = _board.GetLegalMoves(isQSearch && !isInCheck);
         moves = moves.OrderByDescending(m =>
-            TTMove == m ? 100_000 :
-            m.IsCapture ? 1000 * (int)m.CapturePieceType - (int)m.MovePieceType : 0
+            TTMove == m ? 1_000_000 :
+            m.IsPromotion ? 900_000 :    // questionable elo gain
+            m.IsCapture ? 100_000 * (int)m.CapturePieceType - (int)m.MovePieceType :
+            _killerMoves[plyFromRoot] == m ? 90_000 : 0
         ).ToArray();
 
         int startAlpha = alpha;
@@ -144,16 +152,17 @@ public class Cosmos : IChessBot
         for (int i = 0; i < moves.Length; i++)
         {
             Move move = moves[i];
+            bool isQuiet = !(move.IsPromotion || move.IsCapture);
 
-            if (canFutilityPrune && !(movesExplored == 0 || move.IsPromotion || move.IsCapture))
+            if (canFutilityPrune && movesExplored > 0 && isQuiet)
                 continue;
 
             _board.MakeMove(move);
 
             bool fullSearch = isQSearch || movesExplored++ == 0;
-            evaluation = -Search(depth - 1, plyCount + 1, fullSearch ? -beta : -alpha - 1, -alpha);
+            evaluation = -Search(depth - 1, plyFromRoot + 1, fullSearch ? -beta : -alpha - 1, -alpha);
             if (!fullSearch && evaluation > alpha)
-                evaluation = -Search(depth - 1, plyCount + 1, -beta, -alpha);
+                evaluation = -Search(depth - 1, plyFromRoot + 1, -beta, -alpha);
             _board.UndoMove(move);
 
             if (evaluation > bestEvaluation)
@@ -165,14 +174,21 @@ public class Cosmos : IChessBot
 
                 alpha = Math.Max(alpha, evaluation);
                 if (alpha >= beta)
+                {
+                    // Killer Moves
+                    if (isQuiet)
+                        _killerMoves[plyFromRoot] = move;
+
                     break;
+                }
+
             }
 
             if (_timer.MillisecondsElapsedThisTurn > _timeLimit)
                 return 2 * CHECKMATE;
         }
 
-        if (!isQSearch && moves.Length == 0) return isInCheck ? -CHECKMATE + plyCount : 0;
+        if (!isQSearch && moves.Length == 0) return isInCheck ? -CHECKMATE + plyFromRoot : 0;
 
         TTMatch = new(
             zKey,
@@ -180,8 +196,6 @@ public class Cosmos : IChessBot
             bestEvaluation,
             depth,
             bestEvaluation >= beta ? 2 : bestEvaluation <= startAlpha ? 0 : 1);
-        //TTArray[zKey & TTMask] = new TTEntry(zKey, currentBestMove, bestEvaluation, depth,
-        //    bestEvaluation >= beta ? 2 : bestEvaluation <= startAlpha ? 0 : 1);
 
         return bestEvaluation;
     }
