@@ -1,10 +1,6 @@
-﻿#define DEBUG
-
-using ChessChallenge.API;
+﻿using ChessChallenge.API;
 using System;
 using System.Linq;
-using System.Reflection.Metadata;
-
 public class Cosmos : IChessBot
 {
 #if DEBUG
@@ -74,7 +70,7 @@ public class Cosmos : IChessBot
             Console.WriteLine("Stats:\tDepth: {0,-2}\tEvaluation: {1,-5}\tNodes: {2, -9}({3, -5}kN/s)\tBest Move: {4}{5}",
                 searchDepth,
                 printoutEval,
-                exploredNodes,
+                exploredNodes, 
                 exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1),
                 _bestMove.StartSquare.Name, _bestMove.TargetSquare.Name);
 #endif
@@ -90,6 +86,8 @@ public class Cosmos : IChessBot
         bool isQSearch = depth <= 0;
         bool isRoot = plyCount == 0;
         bool isInCheck = _board.IsInCheck();
+        bool canFutilityPrune = false;
+
         int bestEvaluation = -2 * CHECKMATE;
         Move currentBestMove = Move.NullMove;
 
@@ -97,18 +95,23 @@ public class Cosmos : IChessBot
             return 0;
 
         ulong zKey = _board.ZobristKey;
-        TTEntry TTMatch = TTArray[zKey & TTMask];
+        ref TTEntry TTMatch = ref TTArray[zKey & TTMask];
+        Move TTMove = TTMatch.move;
+        int TTEvaluation = TTMatch.evaluation;
+        int TTNodeType = TTMatch.nodeType;
 
         if (TTMatch.zKey == zKey &&
             !isRoot &&
             TTMatch.depth >= depth &&
             (
-                TTMatch.nodeType == 1 ||
-                (TTMatch.nodeType == 0 && TTMatch.evaluation <= alpha) ||
-                (TTMatch.nodeType == 2 && TTMatch.evaluation >= beta))
+                TTNodeType == 1 ||
+                (TTNodeType == 0 && TTEvaluation <= alpha) ||
+                (TTNodeType == 2 && TTEvaluation >= beta))
             )
-            return TTMatch.evaluation;
+            return TTEvaluation;
 
+        if (isInCheck)
+            depth++;
 
         int evaluation;
         if (isQSearch)
@@ -118,20 +121,36 @@ public class Cosmos : IChessBot
                 return beta;
             alpha = Math.Max(alpha, bestEvaluation);
         }
+        else if (beta - alpha == 1 && !isInCheck)
+        {
+            // RMF
+            int staticEvaluation = Evaluate();
+
+            if (depth <= 6 && staticEvaluation - 100 * depth >= beta)
+                return staticEvaluation;
+
+            canFutilityPrune = depth <= 2 && staticEvaluation + 150 * depth <= alpha;
+        }
+
 
         Move[] moves = _board.GetLegalMoves(isQSearch && !isInCheck);
         moves = moves.OrderByDescending(m =>
-            TTMatch.move == m ? 100_000 :
+            TTMove == m ? 100_000 :
             m.IsCapture ? 1000 * (int)m.CapturePieceType - (int)m.MovePieceType : 0
         ).ToArray();
 
         int startAlpha = alpha;
+        int movesExplored = 0;
         for (int i = 0; i < moves.Length; i++)
         {
             Move move = moves[i];
+
+            if (canFutilityPrune && !(movesExplored == 0 || move.IsPromotion || move.IsCapture))
+                continue;
+
             _board.MakeMove(move);
 
-            bool fullSearch = isQSearch || i == 0;
+            bool fullSearch = isQSearch || movesExplored++ == 0;
             evaluation = -Search(depth - 1, plyCount + 1, fullSearch ? -beta : -alpha - 1, -alpha);
             if (!fullSearch && evaluation > alpha)
                 evaluation = -Search(depth - 1, plyCount + 1, -beta, -alpha);
@@ -144,7 +163,6 @@ public class Cosmos : IChessBot
                 if (isRoot)
                     _bestMove = move;
 
-
                 alpha = Math.Max(alpha, evaluation);
                 if (alpha >= beta)
                     break;
@@ -156,8 +174,14 @@ public class Cosmos : IChessBot
 
         if (!isQSearch && moves.Length == 0) return isInCheck ? -CHECKMATE + plyCount : 0;
 
-        TTArray[zKey & TTMask] = new TTEntry(zKey, currentBestMove, bestEvaluation, depth,
+        TTMatch = new(
+            zKey,
+            currentBestMove,
+            bestEvaluation,
+            depth,
             bestEvaluation >= beta ? 2 : bestEvaluation <= startAlpha ? 0 : 1);
+        //TTArray[zKey & TTMask] = new TTEntry(zKey, currentBestMove, bestEvaluation, depth,
+        //    bestEvaluation >= beta ? 2 : bestEvaluation <= startAlpha ? 0 : 1);
 
         return bestEvaluation;
     }
