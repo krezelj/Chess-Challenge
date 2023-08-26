@@ -67,7 +67,6 @@ public class MyBot : IChessBot
 
     public Move Think(Board board, Timer timer)
     {
-        // board = Board.CreateBoardFromFEN("8/8/8/8/8/8/4PPP1/4K2k w - - 0 1");
         _board = board;
         _timer = timer;
         _killerMoves = new Move[512];
