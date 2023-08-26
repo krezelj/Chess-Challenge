@@ -1,8 +1,6 @@
 ﻿using ChessChallenge.API;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Linq;
-using System.Numerics;
 
 public class Cosmos : IChessBot
 {
@@ -114,12 +112,12 @@ public class Cosmos : IChessBot
         ++_exploredNodes;
 #endif
 
-        bool isRoot = plyFromRoot == 0,
+        bool isNotRoot = plyFromRoot > 0,
             isInCheck = _board.IsInCheck(),
             canFutilityPrune = false;
         Move currentBestMove = Move.NullMove;
 
-        if (!isRoot && _board.IsRepeatedPosition())
+        if (isNotRoot && _board.IsRepeatedPosition())
             return 0;
 
         ulong zKey = _board.ZobristKey;
@@ -134,7 +132,7 @@ public class Cosmos : IChessBot
         Move TTMove = TTMatch.move;
 
         if (TTMatch.zKey == zKey &&
-            !isRoot &&
+            isNotRoot &&
             TTMatch.depth >= depth &&
             (
                 TTNodeType == 1 ||
@@ -142,10 +140,10 @@ public class Cosmos : IChessBot
                 (TTNodeType == 2 && TTEvaluation >= beta))
             )
 #if DEBUG
-        {
-            _ttHits++;
-            return TTEvaluation;
-        }
+            {
+                _ttHits++;
+                return TTEvaluation;
+            }
 #else
             return TTEvaluation;
 #endif
@@ -154,6 +152,12 @@ public class Cosmos : IChessBot
         if (isInCheck)
             depth++;
         bool isQSearch = depth <= 0;
+
+        int MiniSearch(
+            int newAlpha,
+            int reduction = 1,
+            bool canNullMovePrune = true) =>
+            evaluation = -Search(depth - reduction, plyFromRoot + 1, -newAlpha, -alpha, canNullMovePrune);
 
         if (isQSearch)
         {
@@ -173,10 +177,21 @@ public class Cosmos : IChessBot
             canFutilityPrune = depth <= 2 && evaluation + 150 * depth <= alpha;
 
             // NMP
+            // TODO Add Zugzwang detection
+            // ulong nonPawnPieces = 0;
+            // for (int i = 0; i < 6; nonPawnPiecesCount |= BBHelper.GetPieceBB(i++, white and black))
+            // int a = 0;
+            // for (int i = 0; i < 6; a |= i)
+            //ulong nonPawnPieces = 0;
+            //for (int i = 0; ++i < 6; nonPawnPieces |=
+            //    _board.GetPieceBitboard((PieceType)i, true) |
+            //    _board.GetPieceBitboard((PieceType)i, false))
+
             if (depth >= 2 && canNMP) // TODO !isRoot? 
             {
                 _board.TrySkipTurn();
-                evaluation = -Search(depth - 2 - depth / 2, plyFromRoot + 1, -beta, -alpha, false);
+                MiniSearch(beta, 2 + depth / 2, false);
+                // evaluation = -Search(depth - 2 - depth / 2, plyFromRoot + 1, -beta, -alpha, false);
                 _board.UndoSkipTurn();
                 if (evaluation >= beta)
                     return evaluation;
@@ -202,17 +217,29 @@ public class Cosmos : IChessBot
 
             _board.MakeMove(move);
 
-            bool fullSearch = isQSearch || movesExplored++ == 0;
-            evaluation = -Search(depth - 1, plyFromRoot + 1, fullSearch ? -beta : -alpha - 1, -alpha, canNMP);
-            if (!fullSearch && evaluation > alpha)
-                evaluation = -Search(depth - 1, plyFromRoot + 1, -beta, -alpha, canNMP);
+            //bool fullSearch = isQSearch || movesExplored++ == 0;
+            //// evaluation = -Search(depth - 1, plyFromRoot + 1, fullSearch ? -beta : -alpha - 1, -alpha, canNMP);
+            //MiniSearch(fullSearch ? beta : alpha + 1, 1, canNMP);
+            //if (!fullSearch && evaluation > alpha)
+            //    MiniSearch(beta, 1, canNMP);
+            //    // evaluation = -Search(depth - 1, plyFromRoot + 1, -beta, -alpha, canNMP);
+
+            //if (MiniSearch(fullSearch ? beta : alpha + 1) > alpha && !fullSearch)
+            //    MiniSearch(beta);
+
+            if (isQSearch || movesExplored++ == 0)
+                MiniSearch(beta);
+            else if (MiniSearch(alpha + 1) > alpha)
+                MiniSearch(beta);
+
+
             _board.UndoMove(move);
 
             if (evaluation > bestEvaluation)
             {
                 bestEvaluation = evaluation;
                 currentBestMove = move;
-                if (isRoot)
+                if (!isNotRoot)
                     _bestMove = move;
 
                 alpha = Math.Max(alpha, evaluation);
@@ -221,7 +248,6 @@ public class Cosmos : IChessBot
                     // Killer Moves
                     if (isQuiet)
                         _killerMoves[plyFromRoot] = move;
-
                     break;
                 }
 

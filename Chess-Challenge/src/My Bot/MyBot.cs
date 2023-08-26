@@ -67,6 +67,7 @@ public class MyBot : IChessBot
 
     public Move Think(Board board, Timer timer)
     {
+        // board = Board.CreateBoardFromFEN("8/8/8/8/8/8/4PPP1/4K2k w - - 0 1");
         _board = board;
         _timer = timer;
         _killerMoves = new Move[512];
@@ -177,16 +178,17 @@ public class MyBot : IChessBot
             canFutilityPrune = depth <= 2 && evaluation + 150 * depth <= alpha;
 
             // NMP
-            // TODO Add Zugzwang detection
-            // ulong nonPawnPieces = 0;
-            // for (int i = 0; i < 6; nonPawnPiecesCount |= BBHelper.GetPieceBB(i++, white and black))
-            // int a = 0;
-            // for (int i = 0; i < 6; a |= i)
-            if (depth >= 2 && canNMP) // TODO !isRoot? 
+            // Pawn Endgame Detection
+            // Too little of an Elo gain
+            //ulong nonPawnPieces = 0;
+            //for (int i = 1; ++i < 6;) 
+            //    nonPawnPieces |= _board.GetPieceBitboard((PieceType)i, true) | _board.GetPieceBitboard((PieceType)i, false);
+
+            // if (depth >= 2 && nonPawnPieces > 0 && canNMP) // TODO !isRoot?
+            if (depth >= 2 && canNMP) // TODO !isRoot?
             {
                 _board.TrySkipTurn();
                 MiniSearch(beta, 2 + depth / 2, false);
-                // evaluation = -Search(depth - 2 - depth / 2, plyFromRoot + 1, -beta, -alpha, false);
                 _board.UndoSkipTurn();
                 if (evaluation >= beta)
                     return evaluation;
@@ -212,21 +214,10 @@ public class MyBot : IChessBot
 
             _board.MakeMove(move);
 
-            //bool fullSearch = isQSearch || movesExplored++ == 0;
-            //// evaluation = -Search(depth - 1, plyFromRoot + 1, fullSearch ? -beta : -alpha - 1, -alpha, canNMP);
-            //MiniSearch(fullSearch ? beta : alpha + 1, 1, canNMP);
-            //if (!fullSearch && evaluation > alpha)
-            //    MiniSearch(beta, 1, canNMP);
-            //    // evaluation = -Search(depth - 1, plyFromRoot + 1, -beta, -alpha, canNMP);
-
-            //if (MiniSearch(fullSearch ? beta : alpha + 1) > alpha && !fullSearch)
-            //    MiniSearch(beta);
-
             if (isQSearch || movesExplored++ == 0)
                 MiniSearch(beta);
             else if (MiniSearch(alpha + 1) > alpha)
                 MiniSearch(beta);
-
 
             _board.UndoMove(move);
 
