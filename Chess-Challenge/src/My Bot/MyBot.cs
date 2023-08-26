@@ -1,14 +1,13 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
+
 public class MyBot : IChessBot
 {
 #if DEBUG
-    private int exploredNodes;
+    private int _exploredNodes;
+    private int _ttHits;
 #endif
-
-    private readonly int CHECKMATE = 10_000;
-
 
     private record struct TTEntry
     (
@@ -72,74 +71,94 @@ public class MyBot : IChessBot
         _timer = timer;
         _killerMoves = new Move[512];
 #if DEBUG
-        exploredNodes = 0;
+        _exploredNodes = 0;
+        _ttHits = 0;
         Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
 #endif
 #if INF
         _timeLimit = 1_000_000_000;
 #else
-        _timeLimit = timer.MillisecondsRemaining / 30;
+        _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
 #endif
 
         for (int searchDepth = 1; ;)
         {
-            int eval = Search(++searchDepth, 0, -CHECKMATE, CHECKMATE);
-            if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit)
+            int eval = Search(++searchDepth, 0, -10_000, 10_000, true);
+            if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit) // TODO add early break when checkmate found
                 return _bestMove;
 #if DEBUG
             string printoutEval = eval.ToString(); ;
-            if (Math.Abs(eval) > CHECKMATE / 2)
+            if (Math.Abs(eval) > 5_000)
             {
-                printoutEval = $"{(eval < 0 ? "-" : "")}M{Math.Ceiling((CHECKMATE - Math.Abs((double)eval)) / 2)}";
+                printoutEval = $"{(eval < 0 ? "-" : "")}M{Math.Ceiling((10_000 - Math.Abs((double)eval)) / 2)}";
             }
-            Console.WriteLine("Stats:\tDepth: {0,-2}\tEvaluation: {1,-5}\tNodes: {2, -9}\tTime: {3,-5}ms\t({4, -5}kN/s)\tBest Move: {5}{6}",
+            Console.WriteLine("Stats: Depth: {0,-1} | Evaluation: {1,-4} | Nodes: {2, -6} | Time: {3,-5}ms" +
+                "({4, 5}kN/s) | TT Hits: {5,-5} | Best Move: {6}{7}",
                 searchDepth,
                 printoutEval,
-                exploredNodes,
+                _exploredNodes,
                 _timer.MillisecondsElapsedThisTurn,
-                exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1),
+                _exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1),
+                _ttHits,
                 _bestMove.StartSquare.Name, _bestMove.TargetSquare.Name);
 #endif
         }
     }
 
-    int Search(int depth, int plyFromRoot, int alpha, int beta)
+
+    int Search(int depth, int plyFromRoot, int alpha, int beta, bool canNMP)
     {
 #if DEBUG
-        ++exploredNodes;
+        ++_exploredNodes;
 #endif
 
-        bool isQSearch = depth <= 0;
-        bool isRoot = plyFromRoot == 0;
-        bool isInCheck = _board.IsInCheck();
-        bool canFutilityPrune = false;
-
-        int bestEvaluation = -2 * CHECKMATE;
+        bool isNotRoot = plyFromRoot > 0, 
+            isInCheck = _board.IsInCheck(), 
+            canFutilityPrune = false;
         Move currentBestMove = Move.NullMove;
 
-        if (!isRoot && _board.IsRepeatedPosition())
+        if (isNotRoot && _board.IsRepeatedPosition())
             return 0;
 
         ulong zKey = _board.ZobristKey;
         ref TTEntry TTMatch = ref TTArray[zKey & 0x3FFFFF];
+        int TTEvaluation = TTMatch.evaluation,
+            TTNodeType = TTMatch.nodeType,
+            bestEvaluation = -20_000,
+            startAlpha = alpha,
+            movesExplored = 0,
+            evaluation;
+        // bestEvaluation is declared here to save tokens
         Move TTMove = TTMatch.move;
-        int TTEvaluation = TTMatch.evaluation;
-        int TTNodeType = TTMatch.nodeType;
 
         if (TTMatch.zKey == zKey &&
-            !isRoot &&
+            isNotRoot &&
             TTMatch.depth >= depth &&
             (
                 TTNodeType == 1 ||
                 (TTNodeType == 0 && TTEvaluation <= alpha) ||
                 (TTNodeType == 2 && TTEvaluation >= beta))
             )
+#if DEBUG
+            {
+                _ttHits++;
+                return TTEvaluation;
+            }
+#else
             return TTEvaluation;
+#endif
+
 
         if (isInCheck)
             depth++;
+        bool isQSearch = depth <= 0;
 
-        int evaluation;
+        int MiniSearch(
+            int newAlpha,
+            int reduction = 1,
+            bool canNullMovePrune = true) => 
+            evaluation = -Search(depth - reduction, plyFromRoot + 1, -newAlpha, -alpha, canNullMovePrune);
+
         if (isQSearch)
         {
             bestEvaluation = Evaluate();
@@ -150,12 +169,28 @@ public class MyBot : IChessBot
         else if (beta - alpha == 1 && !isInCheck)
         {
             // RMF
-            int staticEvaluation = Evaluate();
+            evaluation = Evaluate();
+            if (depth <= 6 && evaluation - 100 * depth >= beta)
+                return evaluation;
 
-            if (depth <= 6 && staticEvaluation - 100 * depth >= beta)
-                return staticEvaluation;
+            // FP
+            canFutilityPrune = depth <= 2 && evaluation + 150 * depth <= alpha;
 
-            canFutilityPrune = depth <= 2 && staticEvaluation + 150 * depth <= alpha;
+            // NMP
+            // TODO Add Zugzwang detection
+            // ulong nonPawnPieces = 0;
+            // for (int i = 0; i < 6; nonPawnPiecesCount |= BBHelper.GetPieceBB(i++, white and black))
+            // int a = 0;
+            // for (int i = 0; i < 6; a |= i)
+            if (depth >= 2 && canNMP) // TODO !isRoot? 
+            {
+                _board.TrySkipTurn();
+                MiniSearch(beta, 2 + depth / 2, false);
+                // evaluation = -Search(depth - 2 - depth / 2, plyFromRoot + 1, -beta, -alpha, false);
+                _board.UndoSkipTurn();
+                if (evaluation >= beta)
+                    return evaluation;
+            }
         }
         
 
@@ -167,8 +202,6 @@ public class MyBot : IChessBot
             _killerMoves[plyFromRoot] == m ? 90_000 : 0
         ).ToArray();
 
-        int startAlpha = alpha;
-        int movesExplored = 0;
         for (int i = 0; i < moves.Length; i++)
         {
             Move move = moves[i];
@@ -179,17 +212,29 @@ public class MyBot : IChessBot
 
             _board.MakeMove(move);
 
-            bool fullSearch = isQSearch || movesExplored++ == 0;
-            evaluation = -Search(depth - 1, plyFromRoot + 1, fullSearch ? -beta : -alpha - 1, -alpha);
-            if (!fullSearch && evaluation > alpha)
-                evaluation = -Search(depth - 1, plyFromRoot + 1, -beta, -alpha);
+            //bool fullSearch = isQSearch || movesExplored++ == 0;
+            //// evaluation = -Search(depth - 1, plyFromRoot + 1, fullSearch ? -beta : -alpha - 1, -alpha, canNMP);
+            //MiniSearch(fullSearch ? beta : alpha + 1, 1, canNMP);
+            //if (!fullSearch && evaluation > alpha)
+            //    MiniSearch(beta, 1, canNMP);
+            //    // evaluation = -Search(depth - 1, plyFromRoot + 1, -beta, -alpha, canNMP);
+
+            //if (MiniSearch(fullSearch ? beta : alpha + 1) > alpha && !fullSearch)
+            //    MiniSearch(beta);
+
+            if (isQSearch || movesExplored++ == 0)
+                MiniSearch(beta);
+            else if (MiniSearch(alpha + 1) > alpha)
+                MiniSearch(beta);
+
+
             _board.UndoMove(move);
 
             if (evaluation > bestEvaluation)
             {
                 bestEvaluation = evaluation;
                 currentBestMove = move;
-                if (isRoot)
+                if (!isNotRoot)
                     _bestMove = move;
 
                 alpha = Math.Max(alpha, evaluation);
@@ -198,17 +243,16 @@ public class MyBot : IChessBot
                     // Killer Moves
                     if (isQuiet)
                         _killerMoves[plyFromRoot] = move;
-
                     break;
                 }
                     
             }
 
             if (_timer.MillisecondsElapsedThisTurn > _timeLimit)
-                return 2 * CHECKMATE;
+                return 20_000;
         }
 
-        if (!isQSearch && moves.Length == 0) return isInCheck ? -CHECKMATE + plyFromRoot : 0;
+        if (!isQSearch && moves.Length == 0) return isInCheck ? -10_000 + plyFromRoot : 0;
 
         TTMatch = new(
             zKey, 
