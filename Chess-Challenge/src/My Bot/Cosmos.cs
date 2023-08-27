@@ -7,7 +7,14 @@ public class Cosmos : IChessBot
 #if DEBUG
     private int _exploredNodes;
     private int _ttHits;
+#if VERBOSE
+    // used to analyse the number of nodes explored per ply per ID depth
+    private int[,] _nodeCount; // ply, startDepth
+    private int _maxPly;
+    private int _idDepth;
 #endif
+#endif
+
 
     private record struct TTEntry
     (
@@ -32,6 +39,8 @@ public class Cosmos : IChessBot
 
     public Cosmos()
     {
+        // Unpacking thanks to Tyrant
+        // https://github.com/Tyrant7/Chess-Challenge/tree/main/Chess-Challenge
         UnpackedPestoTables = new[] {
             63746705523041458768562654720m,     71818693703096985528394040064m, 75532537544690978830456252672m,
             75536154932036771593352371712m,     76774085526445040292133284352m, 3110608541636285947269332480m,
@@ -69,23 +78,33 @@ public class Cosmos : IChessBot
     {
         _board = board;
         _timer = timer;
-        _killerMoves = new Move[512];
+        _killerMoves = new Move[128];
 #if DEBUG
         _exploredNodes = 0;
         _ttHits = 0;
         Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
+#if VERBOSE
+        _nodeCount = new int[64, 32];
+        _maxPly = 0;
+        _idDepth = 1;
 #endif
-#if INF
-        _timeLimit = 1_000_000_000;
-#else
-        _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
 #endif
 
+        _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
         for (int searchDepth = 1; ;)
         {
+#if DEBUG
+#if VERBOSE
+            _idDepth++;
+#endif
+#endif
             int eval = Search(++searchDepth, 0, -10_000, 10_000, true);
             if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit) // TODO add early break when checkmate found
+#if VERBOSE
+                break;
+#else
                 return _bestMove;
+#endif
 #if DEBUG
             string printoutEval = eval.ToString(); ;
             if (Math.Abs(eval) > 5_000)
@@ -102,7 +121,26 @@ public class Cosmos : IChessBot
                 _ttHits,
                 _bestMove.StartSquare.Name, _bestMove.TargetSquare.Name);
 #endif
+
         }
+#if VERBOSE
+        Console.Write("   ");
+        for (int depth = 1; depth <= _idDepth; depth++)
+        {
+            Console.Write("{0,7} | ", depth);
+        }
+        Console.WriteLine();
+        for (int ply = 1;  ply < _maxPly; ply++)
+        {
+            Console.Write("{0,-2}:", ply);
+            for (int depth = 1; depth <= _idDepth; depth++)
+            {
+                Console.Write("{0,7} | ", _nodeCount[ply, depth]);
+            }
+            Console.WriteLine();
+        }
+        return _bestMove;
+#endif
     }
 
 
@@ -110,7 +148,12 @@ public class Cosmos : IChessBot
     {
 #if DEBUG
         ++_exploredNodes;
+#if VERBOSE
+        _nodeCount[plyFromRoot, _idDepth]++;
+        _maxPly = Math.Max(plyFromRoot, _maxPly);
 #endif
+#endif
+
 
         bool isNotRoot = plyFromRoot > 0,
             isInCheck = _board.IsInCheck(),
@@ -128,9 +171,8 @@ public class Cosmos : IChessBot
             startAlpha = alpha,
             movesExplored = 0,
             evaluation;
-        // bestEvaluation is declared here to save tokens
-        Move TTMove = TTMatch.move;
 
+        Move TTMove = TTMatch.move;
         if (TTMatch.zKey == zKey &&
             isNotRoot &&
             TTMatch.depth >= depth &&
@@ -177,21 +219,17 @@ public class Cosmos : IChessBot
             canFutilityPrune = depth <= 2 && evaluation + 150 * depth <= alpha;
 
             // NMP
-            // TODO Add Zugzwang detection
-            // ulong nonPawnPieces = 0;
-            // for (int i = 0; i < 6; nonPawnPiecesCount |= BBHelper.GetPieceBB(i++, white and black))
-            // int a = 0;
-            // for (int i = 0; i < 6; a |= i)
+            // Pawn Endgame Detection
+            // Too little of an Elo gain
             //ulong nonPawnPieces = 0;
-            //for (int i = 0; ++i < 6; nonPawnPieces |=
-            //    _board.GetPieceBitboard((PieceType)i, true) |
-            //    _board.GetPieceBitboard((PieceType)i, false))
+            //for (int i = 1; ++i < 6;) 
+            //    nonPawnPieces |= _board.GetPieceBitboard((PieceType)i, true) | _board.GetPieceBitboard((PieceType)i, false);
 
-            if (depth >= 2 && canNMP) // TODO !isRoot? 
+            // if (depth >= 2 && nonPawnPieces > 0 && canNMP) // TODO !isRoot?
+            if (depth >= 2 && canNMP) // TODO !isRoot?
             {
                 _board.TrySkipTurn();
                 MiniSearch(beta, 2 + depth / 2, false);
-                // evaluation = -Search(depth - 2 - depth / 2, plyFromRoot + 1, -beta, -alpha, false);
                 _board.UndoSkipTurn();
                 if (evaluation >= beta)
                     return evaluation;
@@ -217,21 +255,10 @@ public class Cosmos : IChessBot
 
             _board.MakeMove(move);
 
-            //bool fullSearch = isQSearch || movesExplored++ == 0;
-            //// evaluation = -Search(depth - 1, plyFromRoot + 1, fullSearch ? -beta : -alpha - 1, -alpha, canNMP);
-            //MiniSearch(fullSearch ? beta : alpha + 1, 1, canNMP);
-            //if (!fullSearch && evaluation > alpha)
-            //    MiniSearch(beta, 1, canNMP);
-            //    // evaluation = -Search(depth - 1, plyFromRoot + 1, -beta, -alpha, canNMP);
-
-            //if (MiniSearch(fullSearch ? beta : alpha + 1) > alpha && !fullSearch)
-            //    MiniSearch(beta);
-
             if (isQSearch || movesExplored++ == 0)
                 MiniSearch(beta);
             else if (MiniSearch(alpha + 1) > alpha)
                 MiniSearch(beta);
-
 
             _board.UndoMove(move);
 
