@@ -76,7 +76,7 @@ public class MyBot : IChessBot
     }
 
     public Move Think(Board board, Timer timer)
-    {
+    {        
         _board = board;
         _timer = timer;
         _killerMoves = new Move[512];
@@ -144,7 +144,6 @@ public class MyBot : IChessBot
         return _bestMove;
 #endif
     }
-
 
     int Search(int depth, int plyFromRoot, int alpha, int beta, bool canNMP)
     {
@@ -227,8 +226,7 @@ public class MyBot : IChessBot
             //for (int i = 1; ++i < 6;) 
             //    nonPawnPieces |= _board.GetPieceBitboard((PieceType)i, true) | _board.GetPieceBitboard((PieceType)i, false);
 
-            // if (depth >= 2 && nonPawnPieces > 0 && canNMP) // TODO !isRoot?
-            if (depth >= 2 && canNMP) // TODO !isRoot?
+            if (depth >= 2 && canNMP)
             {
                 _board.TrySkipTurn();
                 MiniSearch(beta, 2 + depth / 2, false);
@@ -275,7 +273,6 @@ public class MyBot : IChessBot
                 alpha = Math.Max(alpha, evaluation);
                 if (alpha >= beta)
                 {
-                    // Killer Moves
                     if (isQuiet)
                     {
                         _killerMoves[plyFromRoot] = move;

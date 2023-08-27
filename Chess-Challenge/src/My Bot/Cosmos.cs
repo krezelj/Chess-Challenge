@@ -34,6 +34,7 @@ public class Cosmos : IChessBot
 
     private Move _bestMove;
     private Move[] _killerMoves;
+    private int[,,] _historyHeuristic;
 
     private readonly int[][] UnpackedPestoTables;
 
@@ -78,7 +79,8 @@ public class Cosmos : IChessBot
     {
         _board = board;
         _timer = timer;
-        _killerMoves = new Move[128];
+        _killerMoves = new Move[512];
+        _historyHeuristic = new int[2, 7, 64]; // side to move, piece (0 is null), target square
 #if DEBUG
         _exploredNodes = 0;
         _ttHits = 0;
@@ -242,7 +244,8 @@ public class Cosmos : IChessBot
             TTMove == m ? 1_000_000 :
             m.IsPromotion ? 900_000 :    // questionable elo gain
             m.IsCapture ? 100_000 * (int)m.CapturePieceType - (int)m.MovePieceType :
-            _killerMoves[plyFromRoot] == m ? 90_000 : 0
+            _killerMoves[plyFromRoot] == m ? 90_000 :
+            _historyHeuristic[plyFromRoot & 1, (int)m.MovePieceType, m.TargetSquare.Index]
         ).ToArray();
 
         for (int i = 0; i < moves.Length; i++)
@@ -274,7 +277,10 @@ public class Cosmos : IChessBot
                 {
                     // Killer Moves
                     if (isQuiet)
+                    {
                         _killerMoves[plyFromRoot] = move;
+                        _historyHeuristic[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                    }
                     break;
                 }
 
