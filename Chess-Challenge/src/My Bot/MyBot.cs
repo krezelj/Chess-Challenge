@@ -7,12 +7,10 @@ public class MyBot : IChessBot
 #if DEBUG
     private int _exploredNodes;
     private int _ttHits;
-#if VERBOSE
     // used to analyse the number of nodes explored per ply per ID depth
     private int[,] _nodeCount; // ply, startDepth
     private int _maxPly;
     private int _idDepth;
-#endif
 #endif
 
 
@@ -84,30 +82,24 @@ public class MyBot : IChessBot
 #if DEBUG
         _exploredNodes = 0;
         _ttHits = 0;
-        Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
-#if VERBOSE
         _nodeCount = new int[64, 32];
         _maxPly = 0;
-        _idDepth = 1;
-#endif
+        _idDepth = 2;
+        Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
 #endif
 
         _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
-        for (int searchDepth = 1; ;)
+        for (int searchDepth = 1, alpha=-10_000, beta=-10_000; ;)
         {
-#if DEBUG
-#if VERBOSE
-            _idDepth++;
-#endif
-#endif
             int eval = Search(++searchDepth, 0, -10_000, 10_000, true);
             if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit) // TODO add early break when checkmate found
-#if VERBOSE
+#if DEBUG
                 break;
 #else
                 return _bestMove;
 #endif
-#if DEBUG
+#if VERBOSE
+            _idDepth++;
             string printoutEval = eval.ToString(); ;
             if (Math.Abs(eval) > 5_000)
             {
@@ -125,7 +117,7 @@ public class MyBot : IChessBot
 #endif
 
         }
-#if VERBOSE
+#if DEBUG
         Console.Write("   ");
         for (int depth = 1; depth <= _idDepth; depth++)
         {
@@ -149,10 +141,8 @@ public class MyBot : IChessBot
     {
 #if DEBUG
         ++_exploredNodes;
-#if VERBOSE
         _nodeCount[plyFromRoot, _idDepth]++;
         _maxPly = Math.Max(plyFromRoot, _maxPly);
-#endif
 #endif
 
 
