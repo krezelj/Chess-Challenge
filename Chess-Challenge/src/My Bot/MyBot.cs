@@ -89,16 +89,45 @@ public class MyBot : IChessBot
 #endif
 
         _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
-        for (int searchDepth = 1, alpha=-10_000, beta=-10_000; ;)
+        for (int searchDepth = 1, alpha=-10_000, beta=10_000; ;)
         {
-            int eval = Search(++searchDepth, 0, -10_000, 10_000, true);
+            int eval = Search(searchDepth, 0, alpha, beta, true);
             if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit) // TODO add early break when checkmate found
 #if DEBUG
                 break;
 #else
                 return _bestMove;
 #endif
-#if VERBOSE
+            // check if eval outside of the window
+            if (eval < alpha)
+                alpha -= 82;
+            else if (eval > beta)
+                beta += 82;
+            else
+            {
+                // eval inside the window, continue with search
+                alpha = eval - 41;
+                beta = eval + 41;
+                searchDepth++;
+            }
+
+            //bool failLow = alpha > eval;
+            //bool failHigh = beta < eval;
+            //if (!(failLow || failHigh))
+            //    searchDepth++;
+
+            //// set new aspiration window
+            //alpha = eval - 41;  // half pawn
+            //beta = eval + 41;   // half pawn
+
+            //// adjust bounds
+            //if (failLow)
+            //    alpha -= 82;
+            //else if (failHigh)
+            //    beta += 82;
+
+
+#if DEBUG
             _idDepth++;
             string printoutEval = eval.ToString(); ;
             if (Math.Abs(eval) > 5_000)
@@ -117,7 +146,7 @@ public class MyBot : IChessBot
 #endif
 
         }
-#if DEBUG
+#if VERBOSE
         Console.Write("   ");
         for (int depth = 1; depth <= _idDepth; depth++)
         {
