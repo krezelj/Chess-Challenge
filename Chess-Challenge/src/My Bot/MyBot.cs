@@ -1,13 +1,24 @@
-﻿using ChessChallenge.API;
+﻿#define DEBUG
+#define VERBOSE
+
+using ChessChallenge.API;
 using System;
 using System.Linq;
+using System.Text;
 
 public class MyBot : IChessBot
 {
 #if DEBUG
     private int _exploredNodes;
     private int _ttHits;
+#if VERBOSE
+    // used to analyse the number of nodes explored per ply per ID depth
+    private int[,] _nodeCount; // ply, startDepth
+    private int _maxPly;
+    private int _idDepth;
 #endif
+#endif
+
 
     private record struct TTEntry
     (
@@ -32,6 +43,8 @@ public class MyBot : IChessBot
 
     public MyBot()
     {
+        // Unpacking thanks to Tyrant
+        // https://github.com/Tyrant7/Chess-Challenge/tree/main/Chess-Challenge
         UnpackedPestoTables = new[] {
             63746705523041458768562654720m,     71818693703096985528394040064m, 75532537544690978830456252672m, 
             75536154932036771593352371712m,     76774085526445040292133284352m, 3110608541636285947269332480m, 
@@ -69,23 +82,33 @@ public class MyBot : IChessBot
     {
         _board = board;
         _timer = timer;
-        _killerMoves = new Move[512];
+        _killerMoves = new Move[128];
 #if DEBUG
         _exploredNodes = 0;
         _ttHits = 0;
         Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
+#if VERBOSE
+        _nodeCount = new int[64, 32];
+        _maxPly = 0;
+        _idDepth = 1;
 #endif
-#if INF
-        _timeLimit = 1_000_000_000;
-#else
-        _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
 #endif
 
+        _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
         for (int searchDepth = 1; ;)
         {
+#if DEBUG
+#if VERBOSE
+            _idDepth++;
+#endif
+#endif
             int eval = Search(++searchDepth, 0, -10_000, 10_000, true);
             if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit) // TODO add early break when checkmate found
+#if VERBOSE
+                break;
+#else
                 return _bestMove;
+#endif
 #if DEBUG
             string printoutEval = eval.ToString(); ;
             if (Math.Abs(eval) > 5_000)
@@ -102,7 +125,26 @@ public class MyBot : IChessBot
                 _ttHits,
                 _bestMove.StartSquare.Name, _bestMove.TargetSquare.Name);
 #endif
+
         }
+#if VERBOSE
+        Console.Write("   ");
+        for (int depth = 1; depth <= _idDepth; depth++)
+        {
+            Console.Write("{0,7} | ", depth);
+        }
+        Console.WriteLine();
+        for (int ply = 1;  ply < _maxPly; ply++)
+        {
+            Console.Write("{0,-2}:", ply);
+            for (int depth = 1; depth <= _idDepth; depth++)
+            {
+                Console.Write("{0,7} | ", _nodeCount[ply, depth]);
+            }
+            Console.WriteLine();
+        }
+        return _bestMove;
+#endif
     }
 
 
@@ -110,7 +152,12 @@ public class MyBot : IChessBot
     {
 #if DEBUG
         ++_exploredNodes;
+#if VERBOSE
+        _nodeCount[plyFromRoot, _idDepth]++;
+        _maxPly = Math.Max(plyFromRoot, _maxPly);
 #endif
+#endif
+
 
         bool isNotRoot = plyFromRoot > 0, 
             isInCheck = _board.IsInCheck(), 
@@ -128,9 +175,8 @@ public class MyBot : IChessBot
             startAlpha = alpha,
             movesExplored = 0,
             evaluation;
-        // bestEvaluation is declared here to save tokens
-        Move TTMove = TTMatch.move;
 
+        Move TTMove = TTMatch.move;
         if (TTMatch.zKey == zKey &&
             isNotRoot &&
             TTMatch.depth >= depth &&
