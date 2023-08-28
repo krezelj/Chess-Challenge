@@ -108,8 +108,8 @@ public class Cosmos : IChessBot
                 beta += 82;
             else
             {
-                alpha = eval - 41;
-                beta = eval + 41;
+                alpha = eval - 21;
+                beta = eval + 21;
                 searchDepth++;
             }
 #if DEBUG
@@ -192,10 +192,10 @@ public class Cosmos : IChessBot
                 (TTNodeType == 2 && TTEvaluation >= beta))
             )
 #if DEBUG
-        {
-            _ttHits++;
-            return TTEvaluation;
-        }
+            {
+                _ttHits++;
+                return TTEvaluation;
+            }
 #else
             return TTEvaluation;
 #endif
@@ -266,19 +266,13 @@ public class Cosmos : IChessBot
                 continue;
 
             _board.MakeMove(move);
-
-            //if (isQSearch || movesExplored++ == 0)
-            //    MiniSearch(beta);
-            //else if (MiniSearch(alpha + 1) > alpha)
-            //    MiniSearch(beta);
-
-            // TODO Token Cleanup
-            // TODO Add isQuiet to list of condition
-            if (isQSearch || movesExplored++ == 0)
-                MiniSearch(beta);
-            else if (((movesExplored >= 5 && depth >= 2 && canLateMoveReduce && isQuiet) ?
-                        MiniSearch(alpha + 1, 4) :
-                        MiniSearch(alpha + 1)) > alpha)
+            // if isQSearch => full search
+            // else if movesExplored == 0 => PV Node => full search
+            // else perform LMR or Null Window Search
+            //      for both use Null Window, for LMR use reduction of 4
+            //      if evaluation > alpha => full search
+            if (isQSearch || movesExplored++ == 0 ||
+                MiniSearch(alpha + 1, (movesExplored >= 5 && depth >= 2 && canLateMoveReduce && isQuiet) ? 4 : 1) > alpha)
                 MiniSearch(beta);
 #if DEBUG
             else

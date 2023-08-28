@@ -10,9 +10,9 @@ public class MyBot : IChessBot
     private int _nonPVExplorations;
 
     // used to analyse the number of nodes explored per ply per ID depth
-    private int[,] _nodeCount; // ply, startDepth
-    private int _maxPly;
-    private int _idDepth;
+    //private int[,] _nodeCount; // ply, startDepth
+    //private int _maxPly;
+    //private int _idDepth;
 #endif
 
 
@@ -85,9 +85,9 @@ public class MyBot : IChessBot
         _exploredNodes = 0;
         _nonPVExplorations = 0;
         _ttHits = 0;
-        _nodeCount = new int[512, 256];
-        _maxPly = 0;
-        _idDepth = 2;
+        //_nodeCount = new int[1024, 1024];
+        //_maxPly = 0;
+        //_idDepth = 2;
         Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
 #endif
 
@@ -113,7 +113,7 @@ public class MyBot : IChessBot
                 searchDepth++;
             }
 #if DEBUG
-            _idDepth++;
+            // _idDepth++;
             string printoutEval = eval.ToString(); ;
             if (Math.Abs(eval) > 5_000)
             {
@@ -159,8 +159,8 @@ public class MyBot : IChessBot
     {
 #if DEBUG
         ++_exploredNodes;
-        _nodeCount[plyFromRoot, _idDepth]++;
-        _maxPly = Math.Max(plyFromRoot, _maxPly);
+        // _nodeCount[plyFromRoot, _idDepth]++;
+        // _maxPly = Math.Max(plyFromRoot, _maxPly);
 #endif
 
 
