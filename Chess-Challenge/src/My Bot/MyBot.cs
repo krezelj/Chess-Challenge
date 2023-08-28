@@ -7,6 +7,8 @@ public class MyBot : IChessBot
 #if DEBUG
     private int _exploredNodes;
     private int _ttHits;
+    private int _nonPVExplorations;
+
     // used to analyse the number of nodes explored per ply per ID depth
     private int[,] _nodeCount; // ply, startDepth
     private int _maxPly;
@@ -77,19 +79,20 @@ public class MyBot : IChessBot
     {        
         _board = board;
         _timer = timer;
-        _killerMoves = new Move[512];
+        _killerMoves = new Move[1024];
         _historyHeuristic = new int[2, 7, 64]; // side to move, piece (0 is null), target square
 #if DEBUG
         _exploredNodes = 0;
+        _nonPVExplorations = 0;
         _ttHits = 0;
-        _nodeCount = new int[64, 32];
+        _nodeCount = new int[512, 256];
         _maxPly = 0;
         _idDepth = 2;
         Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
 #endif
 
         _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
-        for (int searchDepth = 1, alpha=-10_000, beta=10_000; ;)
+        for (int searchDepth = 2, alpha=-10_000, beta=10_000; ;)
         {
             int eval = Search(searchDepth, 0, alpha, beta, true);
             if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit) // TODO add early break when checkmate found
@@ -105,28 +108,10 @@ public class MyBot : IChessBot
                 beta += 82;
             else
             {
-                // eval inside the window, continue with search
                 alpha = eval - 41;
-                beta = eval + 41;
+                beta = eval + 41;             
                 searchDepth++;
             }
-
-            //bool failLow = alpha > eval;
-            //bool failHigh = beta < eval;
-            //if (!(failLow || failHigh))
-            //    searchDepth++;
-
-            //// set new aspiration window
-            //alpha = eval - 41;  // half pawn
-            //beta = eval + 41;   // half pawn
-
-            //// adjust bounds
-            //if (failLow)
-            //    alpha -= 82;
-            //else if (failHigh)
-            //    beta += 82;
-
-
 #if DEBUG
             _idDepth++;
             string printoutEval = eval.ToString(); ;
@@ -134,14 +119,15 @@ public class MyBot : IChessBot
             {
                 printoutEval = $"{(eval < 0 ? "-" : "")}M{Math.Ceiling((10_000 - Math.Abs((double)eval)) / 2)}";
             }
-            Console.WriteLine("Stats: Depth: {0,-1} | Evaluation: {1,-4} | Nodes: {2, -6} | Time: {3,-5}ms" +
-                "({4, 5}kN/s) | TT Hits: {5,-5} | Best Move: {6}{7}",
+            Console.WriteLine("Stats: Depth: {0,-2} | Evaluation: {1,-4} | Nodes: {2, -8} | Time: {3,-5}ms" +
+                "({4, 5}kN/s) | TT Hits: {5,-5} | nPV: {6, -5} | Best Move: {7}{8}",
                 searchDepth,
                 printoutEval,
                 _exploredNodes,
                 _timer.MillisecondsElapsedThisTurn,
                 _exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1),
                 _ttHits,
+                _nonPVExplorations,
                 _bestMove.StartSquare.Name, _bestMove.TargetSquare.Name);
 #endif
 
@@ -164,6 +150,9 @@ public class MyBot : IChessBot
         }
         return _bestMove;
 #endif
+#if DEBUG
+        return _bestMove;
+#endif
     }
 
     int Search(int depth, int plyFromRoot, int alpha, int beta, bool canNMP)
@@ -175,9 +164,10 @@ public class MyBot : IChessBot
 #endif
 
 
-        bool isNotRoot = plyFromRoot > 0, 
-            isInCheck = _board.IsInCheck(), 
-            canFutilityPrune = false;
+        bool    isNotRoot = plyFromRoot > 0, 
+                isInCheck = _board.IsInCheck(), 
+                canFutilityPrune = false,
+                canLateMoveReduce = false;
         Move currentBestMove = Move.NullMove;
 
         if (isNotRoot && _board.IsRepeatedPosition())
@@ -232,19 +222,21 @@ public class MyBot : IChessBot
         {
             // RMF
             evaluation = Evaluate();
-            if (depth <= 6 && evaluation - 100 * depth >= beta)
+            if (depth <= 6 && evaluation - 100 * depth > beta)
                 return evaluation;
 
             // FP
-            canFutilityPrune = depth <= 2 && evaluation + 150 * depth <= alpha;
+            canFutilityPrune = depth <= 2 && evaluation + 150 * depth < alpha;
 
-            // NMP
+            // LMR
+            canLateMoveReduce = true;
+
             // Pawn Endgame Detection
-            // Too little of an Elo gain
             //ulong nonPawnPieces = 0;
             //for (int i = 1; ++i < 6;) 
             //    nonPawnPieces |= _board.GetPieceBitboard((PieceType)i, true) | _board.GetPieceBitboard((PieceType)i, false);
 
+            // NMP
             if (depth >= 2 && canNMP)
             {
                 _board.TrySkipTurn();
@@ -259,8 +251,8 @@ public class MyBot : IChessBot
         Move[] moves = _board.GetLegalMoves(isQSearch && !isInCheck);
         moves = moves.OrderByDescending(m =>
             TTMove == m ? 1_000_000 :
-            m.IsPromotion ? 900_000 :    // questionable elo gain
             m.IsCapture ? 100_000 * (int)m.CapturePieceType - (int)m.MovePieceType :
+            m.IsPromotion ? 91_000 :    // questionable elo gain
             _killerMoves[plyFromRoot] == m ? 90_000 :
             _historyHeuristic[plyFromRoot & 1, (int)m.MovePieceType, m.TargetSquare.Index]
         ).ToArray();
@@ -274,11 +266,18 @@ public class MyBot : IChessBot
                 continue;
 
             _board.MakeMove(move);
-
-            if (isQSearch || movesExplored++ == 0)
+            // if isQSearch => full search
+            // else if movesExplored == 0 => PV Node => full search
+            // else perform LMR or Null Window Search
+            //      for both use Null Window, for LMR use reduction of 4
+            //      if evaluation > alpha => full search
+            if (isQSearch || movesExplored++ == 0 ||
+                MiniSearch(alpha + 1, (movesExplored >= 5 && depth >= 2 && canLateMoveReduce && isQuiet) ? 4 : 1) > alpha)
                 MiniSearch(beta);
-            else if (MiniSearch(alpha + 1) > alpha)
-                MiniSearch(beta);
+#if DEBUG
+            else
+                _nonPVExplorations++;
+#endif
 
             _board.UndoMove(move);
 

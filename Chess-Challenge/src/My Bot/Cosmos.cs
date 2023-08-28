@@ -7,12 +7,12 @@ public class Cosmos : IChessBot
 #if DEBUG
     private int _exploredNodes;
     private int _ttHits;
-#if VERBOSE
+    private int _nonPVExplorations;
+
     // used to analyse the number of nodes explored per ply per ID depth
     private int[,] _nodeCount; // ply, startDepth
     private int _maxPly;
     private int _idDepth;
-#endif
 #endif
 
 
@@ -79,48 +79,55 @@ public class Cosmos : IChessBot
     {
         _board = board;
         _timer = timer;
-        _killerMoves = new Move[512];
+        _killerMoves = new Move[1024];
         _historyHeuristic = new int[2, 7, 64]; // side to move, piece (0 is null), target square
 #if DEBUG
         _exploredNodes = 0;
+        _nonPVExplorations = 0;
         _ttHits = 0;
-        Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
-#if VERBOSE
-        _nodeCount = new int[64, 32];
+        _nodeCount = new int[512, 256];
         _maxPly = 0;
-        _idDepth = 1;
-#endif
+        _idDepth = 2;
+        Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
 #endif
 
         _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
-        for (int searchDepth = 1; ;)
+        for (int searchDepth = 2, alpha = -10_000, beta = 10_000; ;)
         {
-#if DEBUG
-#if VERBOSE
-            _idDepth++;
-#endif
-#endif
-            int eval = Search(++searchDepth, 0, -10_000, 10_000, true);
+            int eval = Search(searchDepth, 0, alpha, beta, true);
             if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit) // TODO add early break when checkmate found
-#if VERBOSE
+#if DEBUG
                 break;
 #else
                 return _bestMove;
 #endif
+            // check if eval outside of the window
+            if (eval < alpha)
+                alpha -= 82;
+            else if (eval > beta)
+                beta += 82;
+            else
+            {
+                alpha = eval - 41;
+                beta = eval + 41;
+                searchDepth++;
+            }
 #if DEBUG
+            _idDepth++;
             string printoutEval = eval.ToString(); ;
             if (Math.Abs(eval) > 5_000)
             {
                 printoutEval = $"{(eval < 0 ? "-" : "")}M{Math.Ceiling((10_000 - Math.Abs((double)eval)) / 2)}";
             }
-            Console.WriteLine("Stats: Depth: {0,-1} | Evaluation: {1,-4} | Nodes: {2, -6} | Time: {3,-5}ms" +
-                "({4, 5}kN/s) | TT Hits: {5,-5} | Best Move: {6}{7}",
+            Console.WriteLine("Stats: Depth: {0,-2} | Evaluation: {1,-4} | Nodes: {2, -8} | Time: {3,-5}ms" +
+                "({4, 5}kN/s) | TT Hits: {5,-5} | nPV: {6, -5} | Best Move: {7}{8}",
                 searchDepth,
                 printoutEval,
                 _exploredNodes,
                 _timer.MillisecondsElapsedThisTurn,
                 _exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1),
                 _ttHits,
+                _nonPVExplorations,
                 _bestMove.StartSquare.Name, _bestMove.TargetSquare.Name);
 #endif
 
@@ -143,23 +150,24 @@ public class Cosmos : IChessBot
         }
         return _bestMove;
 #endif
+#if DEBUG
+        return _bestMove;
+#endif
     }
-
 
     int Search(int depth, int plyFromRoot, int alpha, int beta, bool canNMP)
     {
 #if DEBUG
         ++_exploredNodes;
-#if VERBOSE
         _nodeCount[plyFromRoot, _idDepth]++;
         _maxPly = Math.Max(plyFromRoot, _maxPly);
-#endif
 #endif
 
 
         bool isNotRoot = plyFromRoot > 0,
-            isInCheck = _board.IsInCheck(),
-            canFutilityPrune = false;
+                isInCheck = _board.IsInCheck(),
+                canFutilityPrune = false,
+                canLateMoveReduce = false;
         Move currentBestMove = Move.NullMove;
 
         if (isNotRoot && _board.IsRepeatedPosition())
@@ -184,10 +192,10 @@ public class Cosmos : IChessBot
                 (TTNodeType == 2 && TTEvaluation >= beta))
             )
 #if DEBUG
-            {
-                _ttHits++;
-                return TTEvaluation;
-            }
+        {
+            _ttHits++;
+            return TTEvaluation;
+        }
 #else
             return TTEvaluation;
 #endif
@@ -214,21 +222,22 @@ public class Cosmos : IChessBot
         {
             // RMF
             evaluation = Evaluate();
-            if (depth <= 6 && evaluation - 100 * depth >= beta)
+            if (depth <= 6 && evaluation - 100 * depth > beta)
                 return evaluation;
 
             // FP
-            canFutilityPrune = depth <= 2 && evaluation + 150 * depth <= alpha;
+            canFutilityPrune = depth <= 2 && evaluation + 150 * depth < alpha;
 
-            // NMP
+            // LMR
+            canLateMoveReduce = true;
+
             // Pawn Endgame Detection
-            // Too little of an Elo gain
             //ulong nonPawnPieces = 0;
             //for (int i = 1; ++i < 6;) 
             //    nonPawnPieces |= _board.GetPieceBitboard((PieceType)i, true) | _board.GetPieceBitboard((PieceType)i, false);
 
-            // if (depth >= 2 && nonPawnPieces > 0 && canNMP) // TODO !isRoot?
-            if (depth >= 2 && canNMP) // TODO !isRoot?
+            // NMP
+            if (depth >= 2 && canNMP)
             {
                 _board.TrySkipTurn();
                 MiniSearch(beta, 2 + depth / 2, false);
@@ -242,8 +251,8 @@ public class Cosmos : IChessBot
         Move[] moves = _board.GetLegalMoves(isQSearch && !isInCheck);
         moves = moves.OrderByDescending(m =>
             TTMove == m ? 1_000_000 :
-            m.IsPromotion ? 900_000 :    // questionable elo gain
             m.IsCapture ? 100_000 * (int)m.CapturePieceType - (int)m.MovePieceType :
+            m.IsPromotion ? 91_000 :    // questionable elo gain
             _killerMoves[plyFromRoot] == m ? 90_000 :
             _historyHeuristic[plyFromRoot & 1, (int)m.MovePieceType, m.TargetSquare.Index]
         ).ToArray();
@@ -258,10 +267,23 @@ public class Cosmos : IChessBot
 
             _board.MakeMove(move);
 
+            //if (isQSearch || movesExplored++ == 0)
+            //    MiniSearch(beta);
+            //else if (MiniSearch(alpha + 1) > alpha)
+            //    MiniSearch(beta);
+
+            // TODO Token Cleanup
+            // TODO Add isQuiet to list of condition
             if (isQSearch || movesExplored++ == 0)
                 MiniSearch(beta);
-            else if (MiniSearch(alpha + 1) > alpha)
+            else if (((movesExplored >= 5 && depth >= 2 && canLateMoveReduce && isQuiet) ?
+                        MiniSearch(alpha + 1, 4) :
+                        MiniSearch(alpha + 1)) > alpha)
                 MiniSearch(beta);
+#if DEBUG
+            else
+                _nonPVExplorations++;
+#endif
 
             _board.UndoMove(move);
 
@@ -275,7 +297,6 @@ public class Cosmos : IChessBot
                 alpha = Math.Max(alpha, evaluation);
                 if (alpha >= beta)
                 {
-                    // Killer Moves
                     if (isQuiet)
                     {
                         _killerMoves[plyFromRoot] = move;
