@@ -5,14 +5,7 @@ using System.Linq;
 public class MyBot : IChessBot
 {
 #if DEBUG
-    private int _exploredNodes;
-    private int _ttHits;
-    private int _nonPVExplorations;
-
-    // used to analyse the number of nodes explored per ply per ID depth
-    //private int[,] _nodeCount; // ply, startDepth
-    //private int _maxPly;
-    //private int _idDepth;
+    private ulong _exploredNodes;
 #endif
 
 
@@ -33,7 +26,7 @@ public class MyBot : IChessBot
     private int _timeLimit;
 
     private Move _bestMove;
-    private Move[] _killerMoves;
+    private Move[] _killerMoves = new Move[1024];
     private int[,,] _historyHeuristic;
 
     private readonly int[][] UnpackedPestoTables;
@@ -79,15 +72,9 @@ public class MyBot : IChessBot
     {        
         _board = board;
         _timer = timer;
-        _killerMoves = new Move[1024];
         _historyHeuristic = new int[2, 7, 64]; // side to move, piece (0 is null), target square
 #if DEBUG
         _exploredNodes = 0;
-        _nonPVExplorations = 0;
-        _ttHits = 0;
-        //_nodeCount = new int[1024, 1024];
-        //_maxPly = 0;
-        //_idDepth = 2;
         Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
 #endif
 
@@ -96,11 +83,7 @@ public class MyBot : IChessBot
         {
             int eval = Search(searchDepth, 0, alpha, beta, true);
             if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit) // TODO add early break when checkmate found
-#if DEBUG
-                break;
-#else
                 return _bestMove;
-#endif
             // check if eval outside of the window
             if (eval < alpha)
                 alpha -= 82;
@@ -113,54 +96,28 @@ public class MyBot : IChessBot
                 searchDepth++;
             }
 #if DEBUG
-            // _idDepth++;
             string printoutEval = eval.ToString(); ;
             if (Math.Abs(eval) > 5_000)
             {
                 printoutEval = $"{(eval < 0 ? "-" : "")}M{Math.Ceiling((10_000 - Math.Abs((double)eval)) / 2)}";
             }
             Console.WriteLine("Stats: Depth: {0,-2} | Evaluation: {1,-4} | Nodes: {2, -8} | Time: {3,-5}ms" +
-                "({4, 5}kN/s) | TT Hits: {5,-5} | nPV: {6, -5} | Best Move: {7}{8}",
+                "({4, 5}kN/s) | Best Move: {5}{6}",
                 searchDepth,
                 printoutEval,
                 _exploredNodes,
                 _timer.MillisecondsElapsedThisTurn,
                 _exploredNodes / (_timer.MillisecondsElapsedThisTurn > 0 ? _timer.MillisecondsElapsedThisTurn : 1),
-                _ttHits,
-                _nonPVExplorations,
                 _bestMove.StartSquare.Name, _bestMove.TargetSquare.Name);
 #endif
 
         }
-#if VERBOSE
-        Console.Write("   ");
-        for (int depth = 1; depth <= _idDepth; depth++)
-        {
-            Console.Write("{0,7} | ", depth);
-        }
-        Console.WriteLine();
-        for (int ply = 1;  ply < _maxPly; ply++)
-        {
-            Console.Write("{0,-2}:", ply);
-            for (int depth = 1; depth <= _idDepth; depth++)
-            {
-                Console.Write("{0,7} | ", _nodeCount[ply, depth]);
-            }
-            Console.WriteLine();
-        }
-        return _bestMove;
-#endif
-#if DEBUG
-        return _bestMove;
-#endif
     }
 
     int Search(int depth, int plyFromRoot, int alpha, int beta, bool canNMP)
     {
 #if DEBUG
         ++_exploredNodes;
-        // _nodeCount[plyFromRoot, _idDepth]++;
-        // _maxPly = Math.Max(plyFromRoot, _maxPly);
 #endif
 
 
@@ -191,14 +148,7 @@ public class MyBot : IChessBot
                 (TTNodeType == 0 && TTEvaluation <= alpha) ||
                 (TTNodeType == 2 && TTEvaluation >= beta))
             )
-#if DEBUG
-            {
-                _ttHits++;
-                return TTEvaluation;
-            }
-#else
             return TTEvaluation;
-#endif
 
 
         if (isInCheck)
@@ -239,7 +189,7 @@ public class MyBot : IChessBot
             // NMP
             if (depth >= 2 && canNMP)
             {
-                _board.TrySkipTurn();
+                _board.ForceSkipTurn();
                 MiniSearch(beta, 2 + depth / 2, false);
                 _board.UndoSkipTurn();
                 if (evaluation >= beta)
@@ -256,6 +206,8 @@ public class MyBot : IChessBot
             _killerMoves[plyFromRoot] == m ? 90_000 :
             _historyHeuristic[plyFromRoot & 1, (int)m.MovePieceType, m.TargetSquare.Index]
         ).ToArray();
+
+        if (!isQSearch && moves.Length == 0) return isInCheck ? -10_000 + plyFromRoot : 0;
 
         for (int i = 0; i < moves.Length; i++)
         {
@@ -274,10 +226,6 @@ public class MyBot : IChessBot
             if (isQSearch || movesExplored++ == 0 ||
                 MiniSearch(alpha + 1, (movesExplored >= 5 && depth >= 2 && canLateMoveReduce && isQuiet) ? 4 : 1) > alpha)
                 MiniSearch(beta);
-#if DEBUG
-            else
-                _nonPVExplorations++;
-#endif
 
             _board.UndoMove(move);
 
@@ -304,8 +252,6 @@ public class MyBot : IChessBot
             if (_timer.MillisecondsElapsedThisTurn > _timeLimit)
                 return 20_000;
         }
-
-        if (!isQSearch && moves.Length == 0) return isInCheck ? -10_000 + plyFromRoot : 0;
 
         TTMatch = new(
             zKey, 
