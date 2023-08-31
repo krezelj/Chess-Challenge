@@ -5,7 +5,7 @@ using System.Linq;
 public class CosmosV0_15 : IChessBot
 {
 #if DEBUG
-    private ulong _exploredNodes;
+    private int _exploredNodes;
 #endif
 
 

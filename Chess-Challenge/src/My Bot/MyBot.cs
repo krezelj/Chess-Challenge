@@ -1,11 +1,13 @@
-﻿using ChessChallenge.API;
+﻿#define DEBUG
+
+using ChessChallenge.API;
 using System;
 using System.Linq;
 
 public class MyBot : IChessBot
 {
 #if DEBUG
-    private ulong _exploredNodes;
+    private int _exploredNodes;
 #endif
 
 
@@ -28,6 +30,7 @@ public class MyBot : IChessBot
     private Move _bestMove;
     private Move[] _killerMoves = new Move[1024];
     private int[,,] _historyHeuristic;
+    private int[] moveScores = new int[218];
 
     private readonly int[][] UnpackedPestoTables;
 
@@ -79,10 +82,12 @@ public class MyBot : IChessBot
 #endif
 
         _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
-        for (int searchDepth = 2, alpha=-10_000, beta=10_000; ;)
+
+        for (int searchDepth = 1, alpha=-10_000, beta=10_000; ;)
         {
             int eval = Search(searchDepth, 0, alpha, beta, true);
-            if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit) // TODO add early break when checkmate found
+            // TODO add early break when checkmate found
+            if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit) 
                 return _bestMove;
             // check if eval outside of the window
             if (eval < alpha)
@@ -137,7 +142,8 @@ public class MyBot : IChessBot
             bestEvaluation = -20_000,
             startAlpha = alpha,
             movesExplored = 0,
-            evaluation;
+            evaluation,
+            movesScored = 0;
 
         Move TTMove = TTMatch.move;
         if (TTMatch.zKey == zKey &&
@@ -196,16 +202,30 @@ public class MyBot : IChessBot
                     return evaluation;
             }
         }
-        
+        //else if (beta - alpha > 1 && plyFromRoot % 10 == 0) // PV extension
+        //    depth++;
 
-        Move[] moves = _board.GetLegalMoves(isQSearch && !isInCheck);
-        moves = moves.OrderByDescending(m =>
-            TTMove == m ? 1_000_000 :
-            m.IsCapture ? 100_000 * (int)m.CapturePieceType - (int)m.MovePieceType :
-            m.IsPromotion ? 91_000 :    // questionable elo gain
-            _killerMoves[plyFromRoot] == m ? 90_000 :
-            _historyHeuristic[plyFromRoot & 1, (int)m.MovePieceType, m.TargetSquare.Index]
-        ).ToArray();
+
+        //Move[] moves = _board.GetLegalMoves(isQSearch && !isInCheck);
+        //moves = moves.OrderByDescending(m =>
+        //    TTMove == m ? 1_000_000 :
+        //    m.IsCapture ? 100_000 * (int)m.CapturePieceType - (int)m.MovePieceType :
+        //    m.IsPromotion ? 91_000 :    // questionable elo gain
+        //    _killerMoves[plyFromRoot] == m ? 90_000 :
+        //    _historyHeuristic[plyFromRoot & 1, (int)m.MovePieceType, m.TargetSquare.Index]
+        //).ToArray();
+
+        Span<Move> moves = stackalloc Move[218];
+        _board.GetLegalMovesNonAlloc(ref moves, isQSearch && !isInCheck);
+
+        foreach (Move move in moves)
+            moveScores[movesScored++] = -(
+            move == TTMove ? 10_000_000 :
+            move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+            _killerMoves[plyFromRoot] == move ? 900_000 :
+            _historyHeuristic[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
+
+        moveScores.AsSpan(0, moves.Length).Sort(moves);
 
         if (!isQSearch && moves.Length == 0) return isInCheck ? -10_000 + plyFromRoot : 0;
 
@@ -224,7 +244,7 @@ public class MyBot : IChessBot
             //      for both use Null Window, for LMR use reduction of 4
             //      if evaluation > alpha => full search
             if (isQSearch || movesExplored++ == 0 ||
-                MiniSearch(alpha + 1, (movesExplored >= 5 && depth >= 2 && canLateMoveReduce && isQuiet) ? 4 : 1) > alpha)
+                MiniSearch(alpha + 1, (movesExplored >= 7 && depth >= 2 && canLateMoveReduce && isQuiet) ? 4 : 1) > alpha)
                 MiniSearch(beta);
 
             _board.UndoMove(move);
@@ -237,6 +257,10 @@ public class MyBot : IChessBot
                     _bestMove = move;
 
                 alpha = Math.Max(alpha, evaluation);
+
+                // SPP
+                //if (depth == 1 && isQuiet && evaluation + 130 < bestEvaluation)
+                //    break;
                 if (alpha >= beta)
                 {
                     if (isQuiet)
