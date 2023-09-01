@@ -255,10 +255,10 @@ public class Cosmos : IChessBot
                     _bestMove = move;
 
                 alpha = Math.Max(alpha, evaluation);
-                //if (alpha >= startAlpha + 110)
-                //{
+
+                // SPP
+                //if (depth == 1 && isQuiet && evaluation + 130 < bestEvaluation)
                 //    break;
-                //}
                 if (alpha >= beta)
                 {
                     if (isQuiet)
