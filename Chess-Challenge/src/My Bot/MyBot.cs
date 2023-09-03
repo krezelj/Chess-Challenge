@@ -1,4 +1,6 @@
-﻿using ChessChallenge.API;
+﻿#define DEBUG
+
+using ChessChallenge.API;
 using System;
 using System.Linq;
 
@@ -20,7 +22,7 @@ public class MyBot : IChessBot
 
     private TTEntry[] TTArray = new TTEntry[0x400000];
 
-    // TT as tuple, loses elo but gains some tokens, my look into it later
+    // TT as tuple, loses elo but gains some tokens, might look into it later
     // zKey, Move, eval, depth, flag
     //private readonly (ulong, Move, int, int, int)[] TTArray = new (ulong, Move, int, int, int)[0x400000];
 
@@ -136,7 +138,6 @@ public class MyBot : IChessBot
             return 0;
 
         ulong zKey = _board.ZobristKey;
-        // ref var TTMatch = ref TTArray[zKey & 0x3FFFFF];
         ref TTEntry TTMatch = ref TTArray[zKey & 0x3FFFFF];
         int TTEvaluation = TTMatch.evaluation,
             TTNodeType = TTMatch.nodeType,
@@ -201,15 +202,6 @@ public class MyBot : IChessBot
             }
         }
 
-        //Move[] moves = _board.GetLegalMoves(isQSearch && !isInCheck);
-        //moves = moves.OrderByDescending(m =>
-        //    TTMove == m ? 1_000_000 :
-        //    m.IsCapture ? 100_000 * (int)m.CapturePieceType - (int)m.MovePieceType :
-        //    m.IsPromotion ? 91_000 :    // questionable elo gain
-        //    _killerMoves[plyFromRoot] == m ? 90_000 :
-        //    _historyHeuristic[plyFromRoot & 1, (int)m.MovePieceType, m.TargetSquare.Index]
-        //).ToArray();
-
         Span<Move> moves = stackalloc Move[218];
         _board.GetLegalMovesNonAlloc(ref moves, isQSearch && !isInCheck);
 
@@ -228,6 +220,9 @@ public class MyBot : IChessBot
         {
             Move move = moves[i];
             bool isQuiet = !(move.IsCapture || move.IsPromotion);
+
+            //if (canLMR && movesExplored >= depth * depth && isQuiet)
+            //    continue;
 
             if (canFutilityPrune && movesExplored > 0 && isQuiet)
                 continue;

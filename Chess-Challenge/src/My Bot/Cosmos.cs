@@ -20,6 +20,9 @@ public class Cosmos : IChessBot
 
     private TTEntry[] TTArray = new TTEntry[0x400000];
 
+    // TT as tuple, loses elo but gains some tokens, my look into it later
+    // zKey, Move, eval, depth, flag
+    //private readonly (ulong, Move, int, int, int)[] TTArray = new (ulong, Move, int, int, int)[0x400000];
 
     private Board _board;
     private Timer _timer;
@@ -87,7 +90,6 @@ public class Cosmos : IChessBot
             // TODO add early break when checkmate found
             if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit)
                 return _bestMove;
-            // check if eval outside of the window
             if (eval < alpha)
                 alpha -= 82;
             else if (eval > beta)
@@ -127,13 +129,14 @@ public class Cosmos : IChessBot
         bool isNotRoot = plyFromRoot > 0,
                 isInCheck = _board.IsInCheck(),
                 canFutilityPrune = false,
-                canLateMoveReduce = false;
-        Move currentBestMove = Move.NullMove;
+                canLMR = beta - alpha == 1 && !isInCheck;
+        Move currentBestMove = default;
 
         if (isNotRoot && _board.IsRepeatedPosition())
             return 0;
 
         ulong zKey = _board.ZobristKey;
+        // ref var TTMatch = ref TTArray[zKey & 0x3FFFFF];
         ref TTEntry TTMatch = ref TTArray[zKey & 0x3FFFFF];
         int TTEvaluation = TTMatch.evaluation,
             TTNodeType = TTMatch.nodeType,
@@ -172,7 +175,7 @@ public class Cosmos : IChessBot
                 return beta;
             alpha = Math.Max(alpha, bestEvaluation);
         }
-        else if (beta - alpha == 1 && !isInCheck)
+        else if (canLMR) // Token save, the condition for LMR is !isPv and !isInCheck
         {
             // RMF
             evaluation = Evaluate();
@@ -181,9 +184,6 @@ public class Cosmos : IChessBot
 
             // FP
             canFutilityPrune = depth <= 2 && evaluation + 150 * depth < alpha;
-
-            // LMR
-            canLateMoveReduce = true;
 
             // Pawn Endgame Detection
             //ulong nonPawnPieces = 0;
@@ -200,9 +200,6 @@ public class Cosmos : IChessBot
                     return evaluation;
             }
         }
-        //else if (beta - alpha > 1 && plyFromRoot % 10 == 0) // PV extension
-        //    depth++;
-
 
         //Move[] moves = _board.GetLegalMoves(isQSearch && !isInCheck);
         //moves = moves.OrderByDescending(m =>
@@ -230,7 +227,7 @@ public class Cosmos : IChessBot
         for (int i = 0; i < moves.Length; i++)
         {
             Move move = moves[i];
-            bool isQuiet = !(move.IsPromotion || move.IsCapture);
+            bool isQuiet = !(move.IsCapture || move.IsPromotion);
 
             if (canFutilityPrune && movesExplored > 0 && isQuiet)
                 continue;
@@ -242,7 +239,7 @@ public class Cosmos : IChessBot
             //      for both use Null Window, for LMR use reduction of 4
             //      if evaluation > alpha => full search
             if (isQSearch || movesExplored++ == 0 ||
-                MiniSearch(alpha + 1, (movesExplored >= 7 && depth >= 2 && canLateMoveReduce && isQuiet) ? 4 : 1) > alpha)
+                MiniSearch(alpha + 1, (movesExplored >= 7 && depth >= 2 && canLMR && isQuiet) ? 4 : 1) > alpha)
                 MiniSearch(beta);
 
             _board.UndoMove(move);
