@@ -1,5 +1,4 @@
-﻿using Chess_Challenge.src.Compressor;
-using ChessChallenge.API;
+﻿using ChessChallenge.API;
 using ChessChallenge.UCI;
 using Raylib_cs;
 using System;
@@ -16,7 +15,6 @@ namespace ChessChallenge.Application
 
         public static void Main(string[] args)
         {
-            Compressor.Test();
             if (args.Length > 1 && args[0] == "uci")
             {
                 StartUCI(args);
