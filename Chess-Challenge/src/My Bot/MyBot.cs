@@ -32,7 +32,7 @@ public class MyBot : IChessBot
     private Move _bestMove;
     private Move[] _killerMoves = new Move[1024];
     private int[,,] _historyHeuristic;
-    private int[]   moveScores = new int[218], 
+    private int[] moveScores = new int[218],
                     GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 },
                     weights = Enumerable.Range(0, 96).Select(x => Buffer.GetByte(new ulong[]
                     {
@@ -42,14 +42,14 @@ public class MyBot : IChessBot
                     }, x) * 4).ToArray();
 
     private readonly ulong[] components = new ulong[] {
-        0x227b3c7f7efe7235, 0x7e2f1000000000f4, 0xc63366620243e7d7, 0xff72601810406008,
-        0x1c1c7bfefd3c4cf2, 0x80ffef0000000002, 0xffffffffffffffff, 0x50e4feffffffbf08,
-        0xac4e7f7efe3cde44, 0x2f0000000008f47e, 0xebe7c2404666cc63, 0x1006020818064eff,
-        0x4f323cbf7fde3838, 0x4000000000f7ff01, 0xffffffffffffffff, 0x10fdffffff7f270a,
+        0x44de3cfe7e7f4eac,0x7ef408000000002f,0x63cc664640c2e7eb,0xff4e061808020610,
+        0x3838de7fbf3c324f,0x1fff70000000040,0xffffffffffffffff,0xa277ffffffffd10,
+        0xac4e7f7efe3cde44,0x2f0000000008f47e,0xebe7c2404666cc63,0x1006020818064eff,
+        0x4f323cbf7fde3838,0x4000000000f7ff01,0xffffffffffffffff,0x10fdffffff7f270a,
     };
 
     public Move Think(Board board, Timer timer)
-    {        
+    {
         _board = board;
         _timer = timer;
         _historyHeuristic = new int[2, 7, 64]; // side to move, piece (0 is null), target square
@@ -60,11 +60,11 @@ public class MyBot : IChessBot
 
         _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
 
-        for (int searchDepth = 1, alpha=-10_000, beta=10_000; ;)
+        for (int searchDepth = 1, alpha = -10_000, beta = 10_000; ;)
         {
             int eval = Search(searchDepth, 0, alpha, beta, true);
             // TODO add early break when checkmate found
-            if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit) 
+            if (2 * timer.MillisecondsElapsedThisTurn > _timeLimit)
                 return _bestMove;
             if (eval < alpha)
                 alpha -= 82;
@@ -73,7 +73,7 @@ public class MyBot : IChessBot
             else
             {
                 alpha = eval - 41;
-                beta = eval + 41;             
+                beta = eval + 41;
                 searchDepth++;
             }
 #if STATS
@@ -102,8 +102,8 @@ public class MyBot : IChessBot
 #endif
 
 
-        bool    isNotRoot = plyFromRoot > 0, 
-                isInCheck = _board.IsInCheck(), 
+        bool isNotRoot = plyFromRoot > 0,
+                isInCheck = _board.IsInCheck(),
                 canFutilityPrune = false,
                 canLMR = beta - alpha == 1 && !isInCheck;
         Move currentBestMove = default;
@@ -140,7 +140,7 @@ public class MyBot : IChessBot
         int MiniSearch(
             int newAlpha,
             int reduction = 1,
-            bool canNullMovePrune = true) => 
+            bool canNullMovePrune = true) =>
             evaluation = -Search(depth - reduction, plyFromRoot + 1, -newAlpha, -alpha, canNullMovePrune);
 
         if (isQSearch)
@@ -210,7 +210,7 @@ public class MyBot : IChessBot
             //if (isQSearch || movesExplored++ == 0 ||
             //    MiniSearch(alpha + 1, (movesExplored >= 7 && depth >= 2 && canLMR && isQuiet) ? 4 : 1) > alpha)
             //    MiniSearch(beta);
-            if (isQSearch || 
+            if (isQSearch ||
                 movesExplored++ == 0 ||
                 (movesExplored >= 7 && depth >= 2 && canLMR && isQuiet && MiniSearch(alpha + 1, 4) > alpha) ||
                 MiniSearch(alpha + 1) > alpha)
@@ -235,11 +235,11 @@ public class MyBot : IChessBot
                     if (isQuiet)
                     {
                         _killerMoves[plyFromRoot] = move;
-                        _historyHeuristic[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] +=  depth * depth;
-                    }   
+                        _historyHeuristic[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                    }
                     break;
                 }
-                    
+
             }
 
             if (_timer.MillisecondsElapsedThisTurn > _timeLimit)
@@ -247,9 +247,9 @@ public class MyBot : IChessBot
         }
 
         TTMatch = new(
-            zKey, 
-            currentBestMove, 
-            bestEvaluation, 
+            zKey,
+            currentBestMove,
+            bestEvaluation,
             depth,
             bestEvaluation >= beta ? 2 : bestEvaluation <= startAlpha ? 0 : 1);
 
@@ -260,15 +260,15 @@ public class MyBot : IChessBot
 
     //public int Evaluate()
     //{
-    //    int mg = 0, eg = 0, gamephase = 0, side = -1, weightIdx;
-    //    for (; ++side < 2;)
+    //    int mg = 0, eg = 0, gamephase = 0, weightIdx;
+    //    for (int side = 0; side < 2; side++)
     //    {
     //        weightIdx = 0;
-    //        for (int p = 0; ++p < 6;)
+    //        for (int p = 0; p < 6; p++)
     //        {
-    //            ulong pieceMask = _board.GetPieceBitboard((PieceType)p, side == 0);
+    //            ulong pieceMask = _board.GetPieceBitboard((PieceType)(p + 1), side == 0);
     //            gamephase += GamePhaseIncrement[p] * BitboardHelper.GetNumberOfSetBits(pieceMask); ;
-    //            for (int c = -1; ++c < 8;)
+    //            for (int c = 0; c < 8; c++)
     //            {
     //                int n = BitboardHelper.GetNumberOfSetBits(components[c + side * 8] & pieceMask);
     //                mg += n * weights[weightIdx];
@@ -281,41 +281,29 @@ public class MyBot : IChessBot
     //    return (mg * gamephase + eg * (24 - gamephase)) / 24 * (_board.IsWhiteToMove ? 1 : -1);
     //}
 
-    //public int Evaluate()
-    //{
-    //    int mg = 0, eg = 0, gamephase = 0, side = -1;
-    //    for (; ++side < 2;)
-    //    {
-    //        for (int weightIdx = 0; weightIdx < 48;)
-    //        {
-    //            ulong pieceMask = _board.GetPieceBitboard((PieceType)(weightIdx / 6), side == 0);
-    //            gamephase += GamePhaseIncrement[weightIdx / 6] * BitboardHelper.GetNumberOfSetBits(pieceMask);
-    //            // TODO weightIdx % 8 ->  weightIdx & 7 ? maybe marginally better performance
-    //            // token neutral so if it doesn't fuck things up might just use it
-    //            int n = BitboardHelper.GetNumberOfSetBits(components[weightIdx % 8 + side * 8] & pieceMask);
-    //            mg += n * weights[weightIdx];
-    //            eg += n * weights[weightIdx++ + 48];
-    //        }
-    //        mg = -mg;
-    //        eg = -eg;
-    //    }
-    //    return (mg * gamephase + eg * (24 - gamephase)) / 24 * (_board.IsWhiteToMove ? 1 : -1);
-    //}
-
     public int Evaluate()
     {
         int mg = 0, eg = 0, gamephase = 0, side = -1;
-        for (; side < 2; side+=2)
+        for (; ++side < 2;)
+        {
             for (int weightIdx = 0; weightIdx < 48;)
             {
                 ulong pieceMask = _board.GetPieceBitboard((PieceType)(weightIdx / 8 + 1), side == 0);
-                gamephase += GamePhaseIncrement[weightIdx / 8] * BitboardHelper.GetNumberOfSetBits(pieceMask);
-                int n = BitboardHelper.GetNumberOfSetBits(components[weightIdx & 7 + 4 * side + 4] & pieceMask) * side;
+                int c = weightIdx % 8;
+                if (c == 0) // TODO remove this condition and scale the gamephase by C == the number of components e.g. C=8 24-->184
+                    gamephase += GamePhaseIncrement[weightIdx / 8] * BitboardHelper.GetNumberOfSetBits(pieceMask);
+                int n = BitboardHelper.GetNumberOfSetBits(components[c + side * 8] & pieceMask);
                 mg += n * weights[weightIdx];
                 eg += n * weights[weightIdx++ + 48];
             }
+            mg = -mg;
+            eg = -eg;
+        }
+
         return (mg * gamephase + eg * (24 - gamephase)) / 24 * (_board.IsWhiteToMove ? 1 : -1);
     }
 
     #endregion
 }
+
+
