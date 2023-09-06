@@ -27,6 +27,7 @@ namespace ChessChallenge.Application
             CosmosV0_4,
             CosmosV0_5,
             CosmosV0_6,
+            CosmosV1_0,
             Stockfish1000,
             Stockfish1500,
             Stockfish2000
@@ -228,9 +229,11 @@ namespace ChessChallenge.Application
                 PlayerType.CosmosV0_4 => new ChessPlayer(new CosmosV0_4(), type, GameDurationMilliseconds),
                 PlayerType.CosmosV0_5 => new ChessPlayer(new CosmosV0_5(), type, GameDurationMilliseconds),
                 PlayerType.CosmosV0_6 => new ChessPlayer(new CosmosV0_5(), type, GameDurationMilliseconds),
+                PlayerType.CosmosV1_0 => new ChessPlayer(new CosmosV1_0(), type, GameDurationMilliseconds),
                 PlayerType.Stockfish1000 => new ChessPlayer(new Stockfish1000(), type, GameDurationMilliseconds),
                 PlayerType.Stockfish1500 => new ChessPlayer(new Stockfish1500(), type, GameDurationMilliseconds),
                 PlayerType.Stockfish2000 => new ChessPlayer(new Stockfish2000(), type, GameDurationMilliseconds),
+                
                 _ => new ChessPlayer(new HumanPlayer(boardUI), type)
             };
         }
@@ -242,6 +245,7 @@ namespace ChessChallenge.Application
                 PlayerType.MyBot => new MyBot(),
                 PlayerType.EvilBot => new EvilBot(),
                 PlayerType.Cosmos => new Cosmos(),
+                PlayerType.CosmosV1_0 => new CosmosV1_0(),
                 PlayerType.CosmosV0 => new CosmosV0(),
                 PlayerType.CosmosV0_2 => new CosmosV0_2(),
                 PlayerType.CosmosV0_3 => new CosmosV0_3(),
