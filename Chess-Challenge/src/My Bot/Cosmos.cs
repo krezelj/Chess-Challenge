@@ -20,7 +20,7 @@ public class Cosmos : IChessBot
 
     private TTEntry[] TTArray = new TTEntry[0x400000];
 
-    // TT as tuple, loses elo but gains some tokens, might look into it later
+    // TT as tuple, loses elo but gains some tokens, my look into it later
     // zKey, Move, eval, depth, flag
     //private readonly (ulong, Move, int, int, int)[] TTArray = new (ulong, Move, int, int, int)[0x400000];
 
@@ -33,37 +33,44 @@ public class Cosmos : IChessBot
     private int[,,] _historyHeuristic;
     private int[] moveScores = new int[218];
 
-    private readonly ulong[] components = new ulong[] {
-        0x227b3c7f7efe7235, 0x7e2f1000000000f4, 0xc63366620243e7d7, 0xff72601810406008,
-        0x1c1c7bfefd3c4cf2, 0x80ffef0000000002, 0xffffffffffffffff, 0x50e4feffffffbf08,
-        0xac4e7f7efe3cde44, 0x2f0000000008f47e, 0xebe7c2404666cc63, 0x1006020818064eff,
-        0x4f323cbf7fde3838, 0x4000000000f7ff01, 0xffffffffffffffff, 0x10fdffffff7f270a,
-    };
+    private readonly int[][] UnpackedPestoTables;
 
-    private readonly int[] weights = Enumerable.Range(0, 96).Select(x => Buffer.GetByte(new ulong[]
+    public Cosmos()
     {
-        0xb070306031208,0x192f0c0e02050806,0xa4c040403040007,0x36d0a0309000603,
-        0x9f5050007010500,0x400502000a0301,0x18190000010d00,0x537000600000007,
-        0x344010301000002,0x17f020001000200,0x7de050605000305,0x93e060503000105,
-    }, x) * 4).ToArray();
+        // Unpacking thanks to Tyrant
+        // https://github.com/Tyrant7/Chess-Challenge/tree/main/Chess-Challenge
+        UnpackedPestoTables = new[] {
+            63746705523041458768562654720m,     71818693703096985528394040064m, 75532537544690978830456252672m,
+            75536154932036771593352371712m,     76774085526445040292133284352m, 3110608541636285947269332480m,
+            936945638387574698250991104m,       75531285965747665584902616832m, 77047302762000299964198997571m,
+            3730792265775293618620982364m,      3121489077029470166123295018m,  3747712412930601838683035969m,
+            3763381335243474116535455791m,      8067176012614548496052660822m,  4977175895537975520060507415m,
+            2475894077091727551177487608m,      2458978764687427073924784380m,  3718684080556872886692423941m,
+            4959037324412353051075877138m,      3135972447545098299460234261m,  4371494653131335197311645996m,
+            9624249097030609585804826662m,      9301461106541282841985626641m,  2793818196182115168911564530m,
+            77683174186957799541255830262m,     4660418590176711545920359433m,  4971145620211324499469864196m,
+            5608211711321183125202150414m,      5617883191736004891949734160m,  7150801075091790966455611144m,
+            5619082524459738931006868492m,      649197923531967450704711664m,   75809334407291469990832437230m,
+            78322691297526401047122740223m,     4348529951871323093202439165m,  4990460191572192980035045640m,
+            5597312470813537077508379404m,      4980755617409140165251173636m,  1890741055734852330174483975m,
+            76772801025035254361275759599m,     75502243563200070682362835182m, 78896921543467230670583692029m,
+            2489164206166677455700101373m,      4338830174078735659125311481m,  4960199192571758553533648130m,
+            3420013420025511569771334658m,      1557077491473974933188251927m,  77376040767919248347203368440m,
+            73949978050619586491881614568m,     77043619187199676893167803647m, 1212557245150259869494540530m,
+            3081561358716686153294085872m,      3392217589357453836837847030m,  1219782446916489227407330320m,
+            78580145051212187267589731866m,     75798434925965430405537592305m, 68369566912511282590874449920m,
+            72396532057599326246617936384m,     75186737388538008131054524416m, 77027917484951889231108827392m,
+            73655004947793353634062267392m,     76417372019396591550492896512m, 74568981255592060493492515584m,
+            70529879645288096380279255040m,
+        }.Select(packedTable =>
+        {
+            return decimal.GetBits(packedTable).Take(3)
+                .SelectMany(bit => BitConverter.GetBytes(bit)
+                    .Select(square => (int)((sbyte)square * 1.461) + PieceValues[_timeLimit++ % 12]))
+                .ToArray();
 
-    //public MyBot()
-    //{
-    //    //var smallWeights = new byte[96];
-    //    //Buffer.BlockCopy(new ulong[] {
-    //    //    0x915100b0320021b,  0x20901180b5f0008,  0x60b090d06690206,  0x811100f0f7a0510,
-    //    //    0x80c0a0c0fff0b0a,  0x40e0a0403230810,  0x71e0a0911230a13,  0xd0c050d084c0503,
-    //    //    0x90b090c09510709,  0xb0b0a0a0b860a0a,  0x90e0d120ceb050a,  0x910080e09230505
-    //    //}, 0, smallWeights, 0, 96);
-    //    //weights = smallWeights.Select(x => x * (int)4.11328125 - 40).ToArray();
-
-    //    //for (int i = 0; i < 96;)
-    //    //    weights[i] = Buffer.GetByte(new ulong[] {
-    //    //        0xb070306031208,0x192f0c0e02050806,0xa4c040403040007,0x36d0a0309000603,
-    //    //        0x9f5050007010500,0x400502000a0301,0x18190000010d00,0x537000600000007,
-    //    //        0x344010301000002,0x17f020001000200,0x7de050605000305,0x93e060503000105,
-    //    //        }, i++) * 4;
-    //}
+        }).ToArray();
+    }
 
     public Move Think(Board board, Timer timer)
     {
@@ -129,6 +136,7 @@ public class Cosmos : IChessBot
             return 0;
 
         ulong zKey = _board.ZobristKey;
+        // ref var TTMatch = ref TTArray[zKey & 0x3FFFFF];
         ref TTEntry TTMatch = ref TTArray[zKey & 0x3FFFFF];
         int TTEvaluation = TTMatch.evaluation,
             TTNodeType = TTMatch.nodeType,
@@ -193,6 +201,15 @@ public class Cosmos : IChessBot
             }
         }
 
+        //Move[] moves = _board.GetLegalMoves(isQSearch && !isInCheck);
+        //moves = moves.OrderByDescending(m =>
+        //    TTMove == m ? 1_000_000 :
+        //    m.IsCapture ? 100_000 * (int)m.CapturePieceType - (int)m.MovePieceType :
+        //    m.IsPromotion ? 91_000 :    // questionable elo gain
+        //    _killerMoves[plyFromRoot] == m ? 90_000 :
+        //    _historyHeuristic[plyFromRoot & 1, (int)m.MovePieceType, m.TargetSquare.Index]
+        //).ToArray();
+
         Span<Move> moves = stackalloc Move[218];
         _board.GetLegalMovesNonAlloc(ref moves, isQSearch && !isInCheck);
 
@@ -211,9 +228,6 @@ public class Cosmos : IChessBot
         {
             Move move = moves[i];
             bool isQuiet = !(move.IsCapture || move.IsPromotion);
-
-            //if (canLMR && movesExplored >= depth * depth && isQuiet)
-            //    continue;
 
             if (canFutilityPrune && movesExplored > 0 && isQuiet)
                 continue;
@@ -240,7 +254,7 @@ public class Cosmos : IChessBot
                 alpha = Math.Max(alpha, evaluation);
 
                 // SPP
-                //if (depth == 1 && isQuiet && evaluation + 80 < bestEvaluation)
+                //if (depth == 1 && isQuiet && evaluation + 130 < bestEvaluation)
                 //    break;
                 if (alpha >= beta)
                 {
@@ -269,51 +283,34 @@ public class Cosmos : IChessBot
     }
 
     #region EVALUATION
-    private readonly int[] GamePhaseIncrement = { 0, 0, 1, 1, 2, 4, 0 }; // added value for null move to save tokens later
+    private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
 
-    public int Evaluate()
+    // None, Pawn, Knight, Bishop, Rook, Queen, King 
+    private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
+                                             94, 281, 297, 512, 936, 0 }; // Endgame
+
+    private int Evaluate()
     {
-        int mg = 0, eg = 0, gamephase = 0, side = -1, weightIdx;
-        for (; ++side < 2;)
+        int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2;
+        for (; --sideToMove >= 0;)
         {
-            weightIdx = 0;
-            for (int p = 0; ++p < 6;)
-            {
-                ulong pieceMask = _board.GetPieceBitboard((PieceType)p, side == 0);
-                gamephase += GamePhaseIncrement[p] * BitboardHelper.GetNumberOfSetBits(pieceMask); ;
-                for (int c = -1; ++c < 8;)
+            for (int piece = -1, square; ++piece < 6;)
+                for (ulong mask = _board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
                 {
-                    int n = BitboardHelper.GetNumberOfSetBits(components[c + side * 8] & pieceMask);
-                    mg += n * weights[weightIdx];
-                    eg += n * weights[weightIdx++ + 48];
-                }
-            }
-            mg = -mg;
-            eg = -eg;
-        }
-        return (mg * gamephase + eg * (24 - gamephase)) / 24 * (_board.IsWhiteToMove ? 1 : -1);
-    }
+                    // Gamephase, middlegame -> endgame
+                    gamephase += GamePhaseIncrement[piece];
 
-    //public int Evaluate()
-    //{
-    //    int mg = 0, eg = 0, gamephase = 0, side = -1;
-    //    for (; ++side < 2;)
-    //    {
-    //        for (int weightIdx = 0; weightIdx < 48;)
-    //        {
-    //            ulong pieceMask = _board.GetPieceBitboard((PieceType)(weightIdx / 6), side == 0);
-    //            gamephase += GamePhaseIncrement[weightIdx / 6] * BitboardHelper.GetNumberOfSetBits(pieceMask);
-    //            // TODO weightIdx % 8 ->  weightIdx & 7 ? maybe marginally better performance
-    //            // token neutral so if it doesn't fuck things up might just use it
-    //            int n = BitboardHelper.GetNumberOfSetBits(components[weightIdx % 8 + side * 8] & pieceMask);
-    //            mg += n * weights[weightIdx];
-    //            eg += n * weights[weightIdx++ + 48];
-    //        }
-    //        mg = -mg;
-    //        eg = -eg;
-    //    }
-    //    return (mg * gamephase + eg * (24 - gamephase)) / 24 * (_board.IsWhiteToMove ? 1 : -1);
-    //}
+                    // Material and square evaluation
+                    square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
+                    middlegame += UnpackedPestoTables[square][piece];
+                    endgame += UnpackedPestoTables[square][piece + 6];
+                }
+
+            middlegame = -middlegame;
+            endgame = -endgame;
+        }
+        return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (_board.IsWhiteToMove ? 1 : -1);
+    }
 
     #endregion
 }
