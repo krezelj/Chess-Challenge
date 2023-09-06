@@ -33,24 +33,25 @@ public class MyBot : IChessBot
     private int[,,] _historyHeuristic;
     private int[] moveScores = new int[218];
 
+    // private readonly int[][] UnpackedPestoTables;
     private readonly ulong[] components;
     private readonly int[] weights;
 
     public MyBot()
     {
         var data = new ulong[] {
-            0x9f2f2000000000d6, 0xad88018280898ded, 0xffffffffffffffff, 0xb5d5e50101001008,
-            0x183c7afef8b82800, 0xeb10080000406001, 0xa4fb550200000000, 0x3b030106bd761839,
-            0x6b0000000004f4f9, 0xb7b19101418011b5, 0xffffffffffffffff, 0x1008008080a7abad,
-            0x141d1f7f5e3c18,   0x80060200001008d7, 0x40aadf25,         0x9c186ebd6080c0dc,
-            0x915100b0320021b,  0x20901180b5f0008,  0x60b090d06690206,  0x811100f0f7a0510,
-            0x80c0a0c0fff0b0a,  0x40e0a0403230810,  0x71e0a0911230a13,  0xd0c050d084c0503,
-            0x90b090c09510709,  0xb0b0a0a0b860a0a,  0x90e0d120ceb050a,  0x910080e09230505
+            0x9f2f2000000000d6,0xad88018280898ded,0xffffffffffffffff,0xb5d5e50101001008,
+            0x183c7afef8b82800,0xeb10080000406001,0xa4fb550200000000,0x3b030106bd761839,
+            0x6b0000000004f4f9,0xb7b19101418011b5,0xffffffffffffffff,0x1008008080a7abad,
+            0x141d1f7f5e3c18,0x80060200001008d7,0x40aadf25,0x9c186ebd6080c0dc,
+            0x915100b0320021b,0x20901180b5f0008,0x60b090d06690206,0x811100f0f7a0510,
+            0x80c0a0c0fff0b0a,0x40e0a0403230810,0x71e0a0911230a13,0xd0c050d084c0503,
+            0x90b090c09510709,0xb0b0a0a0b860a0a,0x90e0d120ceb050a,0x910080e09230505
         };
-        components = data.Take(16).ToArray();
         var smallWeights = new byte[96];
         Buffer.BlockCopy(data, 128, smallWeights, 0, 96);
-        weights = smallWeights.Select(x => x * (int)4.11328125 - 40).ToArray();
+        components = data.Take(16).ToArray();
+        weights = smallWeights.Select(x => (int)(x * 4.11328125 - 40)).ToArray();
     }
 
     public Move Think(Board board, Timer timer)
@@ -259,48 +260,27 @@ public class MyBot : IChessBot
     #region EVALUATION
     private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
 
-    //public int Evaluate()
-    //{
-    //    int mg = 0, eg = 0, gamephase = 0;
-    //    for (int side = 0; side < 2; side++)
-    //    {
-    //        for (int p = 0; p < 6; p++)
-    //        {
-    //            ulong pieceMask = _board.GetPieceBitboard((PieceType)p + 1, side == 0);
-    //            int y = BitboardHelper.GetNumberOfSetBits(pieceMask);
-    //            gamephase += GamePhaseIncrement[p] * y;
-    //            for (int c = 0; c < 8; c++)
-    //            {
-    //                int x = BitboardHelper.GetNumberOfSetBits(components[c + side * 8] & pieceMask);
-    //                //mg += x * weights[p * 8 + c];
-    //                //eg += x * weights[p * 8 + c + 48];
-
-    //                int w_mg = weights[p * 8 + c], w_eg = weights[p * 8 + c + 48];
-    //                mg += x * w_mg;
-    //                eg += x * w_eg;
-    //            }
-    //        }
-    //        mg = -mg;
-    //        eg = -eg;
-    //    }
-    //    return (mg * gamephase + eg * (24 - gamephase)) / 24 * (_board.IsWhiteToMove ? 1 : -1);
-    //}
+    // None, Pawn, Knight, Bishop, Rook, Queen, King 
+    //private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
+    //                                         94, 281, 297, 512, 936, 0 }; // Endgame
 
     public int Evaluate()
     {
-        int mg = 0, eg = 0, gamephase = 0, side = -1, weightIdx;
-        for (; ++side < 2;)
+        int mg = 0, eg = 0, gamephase = 0, side = 0, weightIdx;
+        for (; side++ < 2;)
         {
             weightIdx = 0;
-            for (int p = -1; ++p < 6;)
+            for (int p = 0; p++ < 6;)
             {
                 ulong pieceMask = _board.GetPieceBitboard((PieceType)p + 1, side == 0);
                 gamephase += GamePhaseIncrement[p] * BitboardHelper.GetNumberOfSetBits(pieceMask); ;
-                for (int c = -1; ++c < 8;)
+                for (int c = 0; c++ < 8;)
                 {
-                    int n = BitboardHelper.GetNumberOfSetBits(components[c + side * 8] & pieceMask);
-                    mg += n * weights[weightIdx];
-                    eg += n * weights[weightIdx++ + 48];
+                    int n = BitboardHelper.GetNumberOfSetBits(components[c + side * 8] & pieceMask),
+                        w_mg = weights[weightIdx],
+                        w_eg = weights[weightIdx++ + 48];
+                    mg += n * w_mg;
+                    eg += n * w_eg;
                 }
             }
             mg = -mg;
