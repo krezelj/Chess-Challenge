@@ -1,9 +1,11 @@
-﻿using ChessChallenge.API;
+﻿#define STATS
+
+using ChessChallenge.API;
 using System;
 using System.Linq;
 public class MyBot : IChessBot
 {
-#if DEBUG
+#if STATS
     private int _exploredNodes;
 #endif
 
@@ -31,7 +33,7 @@ public class MyBot : IChessBot
     private Move[] _killerMoves = new Move[1024];
     private int[,,] _historyHeuristic;
     private int[]   moveScores = new int[218], 
-                    GamePhaseIncrement = { 0, 0, 1, 1, 2, 4, 0 }, // added value for null move to save tokens later;
+                    GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 },
                     weights = Enumerable.Range(0, 96).Select(x => Buffer.GetByte(new ulong[]
                     {
                         0xb070306031208,0x192f0c0e02050806,0xa4c040403040007,0x36d0a0309000603,
@@ -51,7 +53,7 @@ public class MyBot : IChessBot
         _board = board;
         _timer = timer;
         _historyHeuristic = new int[2, 7, 64]; // side to move, piece (0 is null), target square
-#if DEBUG
+#if STATS
         _exploredNodes = 0;
         Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
 #endif
@@ -74,7 +76,7 @@ public class MyBot : IChessBot
                 beta = eval + 41;             
                 searchDepth++;
             }
-#if DEBUG
+#if STATS
             string printoutEval = eval.ToString(); ;
             if (Math.Abs(eval) > 5_000)
             {
@@ -95,7 +97,7 @@ public class MyBot : IChessBot
 
     int Search(int depth, int plyFromRoot, int alpha, int beta, bool canNMP)
     {
-#if DEBUG
+#if STATS
         ++_exploredNodes;
 #endif
 
@@ -205,8 +207,13 @@ public class MyBot : IChessBot
             // else perform LMR or Null Window Search
             //      for both use Null Window, for LMR use reduction of 4
             //      if evaluation > alpha => full search
-            if (isQSearch || movesExplored++ == 0 ||
-                MiniSearch(alpha + 1, (movesExplored >= 7 && depth >= 2 && canLMR && isQuiet) ? 4 : 1) > alpha)
+            //if (isQSearch || movesExplored++ == 0 ||
+            //    MiniSearch(alpha + 1, (movesExplored >= 7 && depth >= 2 && canLMR && isQuiet) ? 4 : 1) > alpha)
+            //    MiniSearch(beta);
+            if (isQSearch || 
+                movesExplored++ == 0 ||
+                (movesExplored >= 7 && depth >= 2 && canLMR && isQuiet && MiniSearch(alpha + 1, 4) > alpha) ||
+                MiniSearch(alpha + 1) > alpha)
                 MiniSearch(beta);
 
             _board.UndoMove(move);
@@ -301,11 +308,9 @@ public class MyBot : IChessBot
         for (; side < 2; side+=2)
             for (int weightIdx = 0; weightIdx < 48;)
             {
-                ulong pieceMask = _board.GetPieceBitboard((PieceType)(weightIdx / 6), side == 0);
-                gamephase += GamePhaseIncrement[weightIdx / 6] * BitboardHelper.GetNumberOfSetBits(pieceMask);
-                // TODO weightIdx % 8 ->  weightIdx & 7 ? maybe marginally better performance
-                // token neutral so if it doesn't fuck things up might just use it
-                int n = BitboardHelper.GetNumberOfSetBits(components[weightIdx % 8 + 4 * side + 4] & pieceMask) * side;
+                ulong pieceMask = _board.GetPieceBitboard((PieceType)(weightIdx / 8 + 1), side == 0);
+                gamephase += GamePhaseIncrement[weightIdx / 8] * BitboardHelper.GetNumberOfSetBits(pieceMask);
+                int n = BitboardHelper.GetNumberOfSetBits(components[weightIdx & 7 + 4 * side + 4] & pieceMask) * side;
                 mg += n * weights[weightIdx];
                 eg += n * weights[weightIdx++ + 48];
             }
