@@ -215,9 +215,10 @@ public class MyBot : IChessBot
 
         if (!isQSearch && moves.Length == 0) return isInCheck ? -32_000 + plyFromRoot : 0;
 
-        for (int i = 0; i < moves.Length; i++)
+        foreach (Move move in moves)
+        // for (int i = 0; i < moves.Length; i++)
         {
-            Move move = moves[i];
+            // Move move = moves[i];
             bool isQuiet = !(move.IsCapture || move.IsPromotion);
 
             if (canFutilityPrune && movesExplored > 0 && isQuiet)
