@@ -1,66 +1,90 @@
-﻿#define STATS
-
-using ChessChallenge.API;
+﻿using ChessChallenge.API;
 using System;
 using System.Linq;
+
 public class MyBot : IChessBot
 {
-#if STATS
+#if DEBUG
     private int _exploredNodes;
 #endif
 
 
-    private record struct TTEntry
-    (
-        ulong zKey,
-        Move move,
-        int evaluation,
-        int depth,
-        int nodeType
-    );
+    //private record struct TTEntry
+    //(
+    //    ulong zKey,
+    //    Move move,
+    //    int evaluation,
+    //    int depth,
+    //    int nodeType
+    //);
 
-    private TTEntry[] TTArray = new TTEntry[0x400000];
+    //private TTEntry[] TTArray = new TTEntry[0x400000];
 
-    // TT as tuple, loses elo but gains some tokens, might look into it later
+    // TT as tuple, loses elo but gains some tokens, my look into it later
     // zKey, Move, eval, depth, flag
-    //private readonly (ulong, Move, int, int, int)[] TTArray = new (ulong, Move, int, int, int)[0x400000];
+    private readonly (ulong, Move, int, int, int)[] TTArray = new (ulong, Move, int, int, int)[0x400000];
 
-    private Board _board;
+    public Board _board;
     private Timer _timer;
     private int _timeLimit;
 
     private Move _bestMove;
     private Move[] _killerMoves = new Move[1024];
     private int[,,] _historyHeuristic;
-    private int[] moveScores = new int[218],
-                    GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 },
-                    weights = Enumerable.Range(0, 96).Select(x => Buffer.GetByte(new ulong[]
-                    {
-                        0xb070306031208,0x192f0c0e02050806,0xa4c040403040007,0x36d0a0309000603,
-                        0x9f5050007010500,0x400502000a0301,0x18190000010d00,0x537000600000007,
-                        0x344010301000002,0x17f020001000200,0x7de050605000305,0x93e060503000105,
-                    }, x) * 4).ToArray();
+    private int[] moveScores = new int[218];
 
-    private readonly ulong[] components = new ulong[] {
-        0x44de3cfe7e7f4eac,0x7ef408000000002f,0x63cc664640c2e7eb,0xff4e061808020610,
-        0x3838de7fbf3c324f,0x1fff70000000040,0xffffffffffffffff,0xa277ffffffffd10,
-        0xac4e7f7efe3cde44,0x2f0000000008f47e,0xebe7c2404666cc63,0x1006020818064eff,
-        0x4f323cbf7fde3838,0x4000000000f7ff01,0xffffffffffffffff,0x10fdffffff7f270a,
-    };
+    private readonly int[][] UnpackedPestoTables;
+
+    public MyBot()
+    {
+        // Unpacking thanks to Tyrant
+        // https://github.com/Tyrant7/Chess-Challenge/tree/main/Chess-Challenge
+        UnpackedPestoTables = new[] {
+            63746705523041458768562654720m,     71818693703096985528394040064m, 75532537544690978830456252672m,
+            75536154932036771593352371712m,     76774085526445040292133284352m, 3110608541636285947269332480m,
+            936945638387574698250991104m,       75531285965747665584902616832m, 77047302762000299964198997571m,
+            3730792265775293618620982364m,      3121489077029470166123295018m,  3747712412930601838683035969m,
+            3763381335243474116535455791m,      8067176012614548496052660822m,  4977175895537975520060507415m,
+            2475894077091727551177487608m,      2458978764687427073924784380m,  3718684080556872886692423941m,
+            4959037324412353051075877138m,      3135972447545098299460234261m,  4371494653131335197311645996m,
+            9624249097030609585804826662m,      9301461106541282841985626641m,  2793818196182115168911564530m,
+            77683174186957799541255830262m,     4660418590176711545920359433m,  4971145620211324499469864196m,
+            5608211711321183125202150414m,      5617883191736004891949734160m,  7150801075091790966455611144m,
+            5619082524459738931006868492m,      649197923531967450704711664m,   75809334407291469990832437230m,
+            78322691297526401047122740223m,     4348529951871323093202439165m,  4990460191572192980035045640m,
+            5597312470813537077508379404m,      4980755617409140165251173636m,  1890741055734852330174483975m,
+            76772801025035254361275759599m,     75502243563200070682362835182m, 78896921543467230670583692029m,
+            2489164206166677455700101373m,      4338830174078735659125311481m,  4960199192571758553533648130m,
+            3420013420025511569771334658m,      1557077491473974933188251927m,  77376040767919248347203368440m,
+            73949978050619586491881614568m,     77043619187199676893167803647m, 1212557245150259869494540530m,
+            3081561358716686153294085872m,      3392217589357453836837847030m,  1219782446916489227407330320m,
+            78580145051212187267589731866m,     75798434925965430405537592305m, 68369566912511282590874449920m,
+            72396532057599326246617936384m,     75186737388538008131054524416m, 77027917484951889231108827392m,
+            73655004947793353634062267392m,     76417372019396591550492896512m, 74568981255592060493492515584m,
+            70529879645288096380279255040m,
+        }.Select(packedTable =>
+        {
+            return decimal.GetBits(packedTable).Take(3)
+                .SelectMany(bit => BitConverter.GetBytes(bit)
+                    .Select(square => (int)((sbyte)square * 1.461) + PieceValues[_timeLimit++ % 12]))
+                .ToArray();
+
+        }).ToArray();
+    }
 
     public Move Think(Board board, Timer timer)
     {
         _board = board;
         _timer = timer;
         _historyHeuristic = new int[2, 7, 64]; // side to move, piece (0 is null), target square
-#if STATS
+#if DEBUG
         _exploredNodes = 0;
         Console.WriteLine($"\nStats for Ply: {board.PlyCount}");
 #endif
 
         _timeLimit = timer.MillisecondsRemaining / 30; // TODO Add incerementTime/30 to the limit
 
-        for (int searchDepth = 1, alpha = -10_000, beta = 10_000; ;)
+        for (int searchDepth = 1, alpha = -32_000, beta = 32_000; ;)
         {
             int eval = Search(searchDepth, 0, alpha, beta, true);
             // TODO add early break when checkmate found
@@ -76,11 +100,11 @@ public class MyBot : IChessBot
                 beta = eval + 41;
                 searchDepth++;
             }
-#if STATS
+#if DEBUG
             string printoutEval = eval.ToString(); ;
             if (Math.Abs(eval) > 5_000)
             {
-                printoutEval = $"{(eval < 0 ? "-" : "")}M{Math.Ceiling((10_000 - Math.Abs((double)eval)) / 2)}";
+                printoutEval = $"{(eval < 0 ? "-" : "")}M{Math.Ceiling((32_000 - Math.Abs((double)eval)) / 2)}";
             }
             Console.WriteLine("Stats: Depth: {0,-2} | Evaluation: {1,-4} | Nodes: {2, -8} | Time: {3,-5}ms" +
                 "({4, 5}kN/s) | Best Move: {5}{6}",
@@ -97,7 +121,7 @@ public class MyBot : IChessBot
 
     int Search(int depth, int plyFromRoot, int alpha, int beta, bool canNMP)
     {
-#if STATS
+#if DEBUG
         ++_exploredNodes;
 #endif
 
@@ -112,19 +136,20 @@ public class MyBot : IChessBot
             return 0;
 
         ulong zKey = _board.ZobristKey;
-        ref TTEntry TTMatch = ref TTArray[zKey & 0x3FFFFF];
-        int TTEvaluation = TTMatch.evaluation,
-            TTNodeType = TTMatch.nodeType,
-            bestEvaluation = -20_000,
+        ref var TTMatch = ref TTArray[zKey & 0x3FFFFF];
+        // ref TTEntry TTMatch = ref TTArray[zKey & 0x3FFFFF];
+        int TTEvaluation = TTMatch.Item3,
+            TTNodeType = TTMatch.Item5,
+            bestEvaluation = -32_100,
             startAlpha = alpha,
             movesExplored = 0,
             evaluation,
             movesScored = 0;
 
-        Move TTMove = TTMatch.move;
-        if (TTMatch.zKey == zKey &&
+        Move TTMove = TTMatch.Item2;
+        if (TTMatch.Item1 == zKey &&
             isNotRoot &&
-            TTMatch.depth >= depth &&
+            TTMatch.Item4 >= depth &&
             (
                 TTNodeType == 1 ||
                 (TTNodeType == 0 && TTEvaluation <= alpha) ||
@@ -169,7 +194,7 @@ public class MyBot : IChessBot
             if (depth >= 2 && canNMP)
             {
                 _board.ForceSkipTurn();
-                MiniSearch(beta, 2 + depth / 2, false);
+                MiniSearch(beta, 4 + depth / 3, false);
                 _board.UndoSkipTurn();
                 if (evaluation >= beta)
                     return evaluation;
@@ -188,15 +213,12 @@ public class MyBot : IChessBot
 
         moveScores.AsSpan(0, moves.Length).Sort(moves);
 
-        if (!isQSearch && moves.Length == 0) return isInCheck ? -10_000 + plyFromRoot : 0;
+        if (!isQSearch && moves.Length == 0) return isInCheck ? -32_000 + plyFromRoot : 0;
 
         for (int i = 0; i < moves.Length; i++)
         {
             Move move = moves[i];
             bool isQuiet = !(move.IsCapture || move.IsPromotion);
-
-            //if (canLMR && movesExplored >= depth * depth && isQuiet)
-            //    continue;
 
             if (canFutilityPrune && movesExplored > 0 && isQuiet)
                 continue;
@@ -207,13 +229,8 @@ public class MyBot : IChessBot
             // else perform LMR or Null Window Search
             //      for both use Null Window, for LMR use reduction of 4
             //      if evaluation > alpha => full search
-            //if (isQSearch || movesExplored++ == 0 ||
-            //    MiniSearch(alpha + 1, (movesExplored >= 7 && depth >= 2 && canLMR && isQuiet) ? 4 : 1) > alpha)
-            //    MiniSearch(beta);
-            if (isQSearch ||
-                movesExplored++ == 0 ||
-                (movesExplored >= 7 && depth >= 2 && canLMR && isQuiet && MiniSearch(alpha + 1, 4) > alpha) ||
-                MiniSearch(alpha + 1) > alpha)
+            if (isQSearch || movesExplored++ == 0 ||
+                MiniSearch(alpha + 1, (movesExplored >= 7 && depth >= 2 && canLMR && isQuiet) ? 4 : 1) > alpha)
                 MiniSearch(beta);
 
             _board.UndoMove(move);
@@ -228,7 +245,7 @@ public class MyBot : IChessBot
                 alpha = Math.Max(alpha, evaluation);
 
                 // SPP
-                //if (depth == 1 && isQuiet && evaluation + 80 < bestEvaluation)
+                //if (depth == 1 && isQuiet && evaluation + 130 < bestEvaluation)
                 //    break;
                 if (alpha >= beta)
                 {
@@ -243,7 +260,7 @@ public class MyBot : IChessBot
             }
 
             if (_timer.MillisecondsElapsedThisTurn > _timeLimit)
-                return 20_000;
+                return 32_100;
         }
 
         TTMatch = new(
@@ -257,53 +274,34 @@ public class MyBot : IChessBot
     }
 
     #region EVALUATION
+    private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
 
-    //public int Evaluate()
-    //{
-    //    int mg = 0, eg = 0, gamephase = 0, weightIdx;
-    //    for (int side = 0; side < 2; side++)
-    //    {
-    //        weightIdx = 0;
-    //        for (int p = 0; p < 6; p++)
-    //        {
-    //            ulong pieceMask = _board.GetPieceBitboard((PieceType)(p + 1), side == 0);
-    //            gamephase += GamePhaseIncrement[p] * BitboardHelper.GetNumberOfSetBits(pieceMask); ;
-    //            for (int c = 0; c < 8; c++)
-    //            {
-    //                int n = BitboardHelper.GetNumberOfSetBits(components[c + side * 8] & pieceMask);
-    //                mg += n * weights[weightIdx];
-    //                eg += n * weights[weightIdx++ + 48];
-    //            }
-    //        }
-    //        mg = -mg;
-    //        eg = -eg;
-    //    }
-    //    return (mg * gamephase + eg * (24 - gamephase)) / 24 * (_board.IsWhiteToMove ? 1 : -1);
-    //}
+    // None, Pawn, Knight, Bishop, Rook, Queen, King 
+    private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
+                                             94, 281, 297, 512, 936, 0 }; // Endgame
 
     public int Evaluate()
     {
-        int mg = 0, eg = 0, gamephase = 0, side = -1;
-        for (; ++side < 2;)
+        int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2;
+        for (; --sideToMove >= 0;)
         {
-            for (int weightIdx = 0; weightIdx < 48;)
-            {
-                ulong pieceMask = _board.GetPieceBitboard((PieceType)(weightIdx / 8 + 1), side == 0);
-                int c = weightIdx % 8;
-                if (c == 0) // TODO remove this condition and scale the gamephase by C == the number of components e.g. C=8 24-->184
-                    gamephase += GamePhaseIncrement[weightIdx / 8] * BitboardHelper.GetNumberOfSetBits(pieceMask);
-                int n = BitboardHelper.GetNumberOfSetBits(components[c + side * 8] & pieceMask);
-                mg += n * weights[weightIdx];
-                eg += n * weights[weightIdx++ + 48];
-            }
-            mg = -mg;
-            eg = -eg;
-        }
+            for (int piece = -1, square; ++piece < 6;)
+                for (ulong mask = _board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
+                {
+                    // Gamephase, middlegame -> endgame
+                    gamephase += GamePhaseIncrement[piece];
 
-        return (mg * gamephase + eg * (24 - gamephase)) / 24 * (_board.IsWhiteToMove ? 1 : -1);
+                    // Material and square evaluation
+                    square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
+                    middlegame += UnpackedPestoTables[square][piece];
+                    endgame += UnpackedPestoTables[square][piece + 6];
+                }
+
+            middlegame = -middlegame;
+            endgame = -endgame;
+        }
+        return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (_board.IsWhiteToMove ? 1 : -1);
     }
 
     #endregion
 }
-
-

@@ -16,7 +16,6 @@ namespace ChessChallenge.Application
 
         public static void Main(string[] args)
         {
-            Compressor.Test();
             if (args.Length > 1 && args[0] == "uci")
             {
                 StartUCI(args);
